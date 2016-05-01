@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn, seq2seq
+import time
 
-NUM_SAMPLES = 10
+NUM_SAMPLES = 8
 BATCH_SIZE = 4
-SEQUENCE_LENGTH = 4
+SEQUENCE_LENGTH = 5
 INPUT_DIM = 4 # size of vocabulary
 NUM_HIDDEN = 50
 
@@ -79,7 +80,6 @@ def train_rnn_seq_to_seq():
     # define the loss and gradients 
     losses = []
     for idx in range(SEQUENCE_LENGTH):
-        #diff = y_train[:, idx, :] - predictions[idx]
         diff = decoder_inputs[idx + 1] - predictions[idx]
         loss = tf.reduce_mean(tf.square(diff))
         losses.append(loss)
@@ -88,12 +88,14 @@ def train_rnn_seq_to_seq():
     loss = tf.add_n(losses)
 
     # define optimizer
-    opt = tf.train.GradientDescentOptimizer(0.1)
+    opt = tf.train.AdamOptimizer(0.001)
 
     # define update
     params = tf.trainable_variables()
     gradients = tf.gradients(loss, params)
-    updates = opt.apply_gradients(zip(gradients, params))
+    max_gradient_norm = 1
+    clipped_gradients, norm = tf.clip_by_global_norm(gradients, max_gradient_norm)
+    updates = opt.apply_gradients(zip(clipped_gradients, params))
       
     # run
     with tf.Session() as sess:
@@ -117,8 +119,7 @@ def train_rnn_seq_to_seq():
                     input_feed[decoder_inputs[idx]] = y_train[start_idx:end_idx, idx, :]
                 input_feed[decoder_inputs[SEQUENCE_LENGTH]] = y_train[start_idx:end_idx, SEQUENCE_LENGTH, :]
 
-                _ = sess.run([updates], feed_dict=input_feed)
-                loss_out = sess.run(loss, feed_dict=input_feed)
+                _, loss_out = sess.run([updates, loss], feed_dict=input_feed)
                 epoch_losses.append(loss_out)
 
             print('epoch {} average loss: {}'.format(eidx, np.mean(epoch_losses)))
@@ -127,32 +128,9 @@ def train_rnn_seq_to_seq():
         plt.plot(np.array(losses).flatten())
         plt.show()
 
-        # for _ in range(100):
-        #     sess.run(updates, feed_dict=input_feed)
-        # print sess.run(loss, feed_dict=input_feed)
-
-        # # print sess.run(predictions[0], feed_dict=input_feed)
-        # # print sess.run(losses[0], feed_dict=input_feed)
-        # # print sess.run(loss, feed_dict=input_feed)
-        # # print sess.run(opt, feed_dict=input_feed)
-
-        # # for _ in range(100):
-        # #     ups = sess.run(gradients, feed_dict=input_feed)
-
-
-
-        # # print sess.run(loss, feed_dict=input_feed)
-        # # print sess.run(params, feed_dict=input_feed)
-        # # print sess.run(gradients, feed_dict=input_feed)
-        # # print sess.run(params)
-        # # print sess.run(updates, feed_dict=input_feed)
-        # # print sess.run(params)
-        # # updates, loss, pred = sess.run(output_feed, input_feed)
-        # # print updates
-        # # print loss
-        # # print pred
-        
-
 if __name__ == '__main__':
+    start = time.time()
     train_rnn_seq_to_seq()
+    end = time.time()
+    print('took {} seconds'.format(end - start))
 
