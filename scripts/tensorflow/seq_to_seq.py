@@ -1,3 +1,7 @@
+"""
+An encoder-decoder rnn implementation. Maps sequences of input values to sequences of 
+output values. 
+"""
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,7 +36,6 @@ class SeqToSeq(object):
 
         # initialize all variable and prep to save model
         tf.initialize_all_variables().run()
-        self.saver = tf.train.Saver()
 
     def forward(self):
         # unpack values for easier reference
@@ -106,6 +109,7 @@ class SeqToSeq(object):
         targets = [dec_input for dec_input in self.decoder_inputs[1:]]
 
         # compute the loss, which for now is squared error
+        # this could also be cross entropy and, in fact, probably should be
         losses = []
         for idx in range(seq_length):
             diff = targets[idx] - predictions[idx]
