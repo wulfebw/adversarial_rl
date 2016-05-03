@@ -41,10 +41,10 @@ class AdversarialNets(object):
         self.generated = self.generate()
 
         # get the predictions from the discriminator
-        predictions = self.discriminate(self.generated)
+        self.gen_predictions = self.discriminate(self.generated)
 
         # formulate the loss
-        self.gen_train_loss_out = self.gen_train_loss(predictions)
+        self.gen_train_loss_out = self.gen_train_loss(self.gen_predictions)
 
         # create the gen train op
         self.gen_optimize(self.gen_train_loss_out)
@@ -107,7 +107,7 @@ class AdversarialNets(object):
         return predictions
 
     def gen_train_loss(self, predictions):
-        return tf.reduce_mean(tf.log(1 - predictions))
+        return tf.reduce_mean(-predictions)
 
     def dis_train_loss(self, predictions):
         return tf.reduce_mean(tf.square(self.targets - predictions))
@@ -163,11 +163,11 @@ class AdversarialNets(object):
                 loss_out = self._sess.run([self.gen_val_loss_out], feed_dict=feed)
             else: 
                 # perform the actual training step if training
-                _, loss_out, generated = self._sess.run([self._train_gen, 
-                            self.gen_train_loss_out, self.generated], feed_dict=feed)
+                _, loss_out, generateds, preds = self._sess.run([self._train_gen, 
+                            self.gen_train_loss_out, self.generated, self.gen_predictions], feed_dict=feed)
 
-            self._dataset.add_generated_samples(generated)
-            
+            self._dataset.add_generated_samples(generateds)
+
             losses.append(loss_out)
 
         self.epoch += 1
@@ -176,8 +176,14 @@ class AdversarialNets(object):
 
     def train_discriminator(self, validation=False):
         losses = []
-        while self._dataset.epoch == self.epoch:
+
+        num_batches = self._opts.fake_num_samples / self._opts.batch_size
+        for bidx in range(num_batches):
             inputs, targets = self._dataset.next_batch(validation)
+
+            print inputs
+            print targets
+            raw_input()
 
             # build the dict to feed inputs to graph
             feed = {}

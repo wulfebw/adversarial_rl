@@ -108,7 +108,7 @@ class FakeAdversarialDataset(object):
         start = self._index_in_epoch
 
         # increment the index to use as an end value
-        self._index_in_epoch += self._opts.batch_size / 2
+        self._index_in_epoch += self._opts.batch_size
 
         reset_generated_samples = False
         if self._index_in_epoch > end_epoch_index:
@@ -116,7 +116,7 @@ class FakeAdversarialDataset(object):
             self.epoch += 1
 
             start = 0
-            self._index_in_epoch = self._opts.batch_size / 2
+            self._index_in_epoch = self._opts.batch_size
             assert self._opts.batch_size < end_epoch_index
             reset_generated_samples = True
 
@@ -135,12 +135,15 @@ class FakeAdversarialDataset(object):
         # combine and order randomly to make learning smoother
         # the data here is of shape (batch_size, num_samples)
         X = np.vstack((real_data, gen_data))
-        num_labels_each = self._opts.batch_size / 2
+        num_labels_each = self._opts.batch_size
         y = np.vstack((np.tile([1,0], (num_labels_each, 1)), np.tile([0,1], (num_labels_each, 1))))
 
         idxs = np.random.permutation(np.arange(len(X)))
         X = X[idxs]
+        X = X[:self._opts.batch_size]
+        y = y[:self._opts.batch_size]
         y = y[idxs]
+
 
         if reset_generated_samples:
             self.reset_generated_samples()
