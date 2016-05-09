@@ -98,57 +98,44 @@ class FakeAdversarialDataset(object):
         """
         Returns a batch of data consisting of both "real" data from the 
         original dataset created during initialization as well as data
-        from the generative model from this epoch only.
+        from the generative model.
         """
-        end_epoch_index = self._opts.fake_num_samples
-        if validation:
-            end_epoch_index /= self._opts.fake_val_ratio
 
-        # set normal start value
-        start = self._index_in_epoch
+        # get the data
+        X = self.data["X_val"] if validation else self.data["X_train"] 
+        generated_samples = self.data["generated_samples"]
 
-        # increment the index to use as an end value
-        self._index_in_epoch += self._opts.batch_size
+        # decide how many batches there will be
+        # because each batch is half real and half fake
+        # the number of batches will be 2 times the number
+        # of batches in the smaller collection
+        num_samples = min(len(X), len(generated_samples))
+        num_batches = (2 * num_samples) / self._opts.batch_size 
 
-        reset_generated_samples = False
-        if self._index_in_epoch > end_epoch_index:
-            # finished epoch
-            self.epoch += 1
+        # go through all the batches collecting real and 
+        # fake data and yielding it
+        for bidx in range(num_batches):
+            # effective batch size is real batch_size / 2
+            effective_batch_size = self._opts.batch_size / 2
+            # start and end indices
+            start = bidx * effective_batch_size
+            end = (bidx + 1) * effective_batch_size
 
-            start = 0
-            self._index_in_epoch = self._opts.batch_size
-            assert self._opts.batch_size < end_epoch_index
-            reset_generated_samples = True
+            # real data
+            real_x_batch = X[start:end]
+            real_y = np.ones((effective_batch_size, 1))
 
-        end = self._index_in_epoch
+            # fake data
+            fake_x_batch = generated_samples[start:end]
+            fake_y = np.zeros((effective_batch_size, 1))
 
-        # return different sets depending on train / validation
-        if validation:
-            real_data = self.data['X_val'][start:end]
-        else:
-            real_data = self.data['X_train'][start:end]
+            # combine the two
+            inputs = np.vstack((real_x_batch, fake_x_batch))
+            targets = np.vstack((real_y, fake_y))
 
-        # regardless of train vs val, use generated samples
-        assert len(self.data['generated_samples']) >= end
-        gen_data = self.data['generated_samples'][start:end]
+            yield inputs, targets
 
-        # combine and order randomly to make learning smoother
-        # the data here is of shape (batch_size, num_samples)
-        X = np.vstack((real_data, gen_data))
-        num_labels_each = self._opts.batch_size
-        y = np.vstack((np.tile([1,0], (num_labels_each, 1)), np.tile([0,1], (num_labels_each, 1))))
-
-        idxs = np.random.permutation(np.arange(len(X)))
-        X = X[idxs]
-        X = X[:self._opts.batch_size]
-        y = y[:self._opts.batch_size]
-        y = y[idxs]
-
-
-        if reset_generated_samples:
-            self.reset_generated_samples()
-
-        return X, y
+        self.reset_generated_samples()
 
     def add_generated_samples(self, samples):
         """
@@ -162,6 +149,9 @@ class FakeAdversarialDataset(object):
         during initialization.
 
         The generated samples list is cleared after each epoch.
+
+        Parameters:
+        - samples is of shape (batch_size, input_dim)
         """
         if 'generated_samples' not in self.data:
             self.data['generated_samples'] = []
@@ -203,18 +193,4 @@ class FakeAdversarialDataset(object):
         X_val = np.tile([1,0], (num_samples / self._opts.fake_val_ratio, 1))
         data['X_val'] = X_val
         self.data = data
-
-    def make_fake_generated(self):
-        """
-        For debugging, mock the generated dataset with a fake one.
-        """
-        data = {}
-        num_samples = self._opts.fake_num_samples
-
-        X_train = np.tile([.5,.5], (num_samples, 1))
-        self.data['generated_samples'] = X_train
-
-
-
-
 

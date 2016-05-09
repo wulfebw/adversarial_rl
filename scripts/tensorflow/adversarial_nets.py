@@ -1,6 +1,5 @@
 """
-An encoder-decoder rnn implementation. Maps sequences of input values to sequences of 
-output values. 
+Adversarial networks implementation
 """
 
 import matplotlib.pyplot as plt
@@ -18,6 +17,7 @@ class AdversarialNets(object):
         self._build_gen_graph()
         self._build_dis_graph()
         self.epoch = 0
+        self.updates = 0
         self.train_gen_losses = []
         self.train_dis_losses = []
         self.val_gen_losses = []
@@ -27,20 +27,23 @@ class AdversarialNets(object):
         # unpack values for easier reference
         batch_size = self._opts.batch_size
         input_dim = self._opts.fake_input_dim
+        z_dim = self._opts.z_dim
         num_hidden = self._opts.num_hidden
 
         # placeholder for z, randomly sampled data
-        self.z = tf.placeholder(tf.float32, shape=(batch_size, input_dim), name='z')
+        self.z = tf.placeholder(tf.float32, shape=(batch_size, z_dim), name='z')
         # placeholder for inputs
         self.inputs = tf.placeholder(tf.float32, shape=(batch_size, input_dim), name='inputs')
         # placeholder for target values
-        self.targets = tf.placeholder(tf.float32, shape=(self._opts.batch_size, 2), name='targets')
+        self.targets = tf.placeholder(tf.float32, shape=(self._opts.batch_size, 1), name='targets')
 
     def _build_gen_graph(self):
         # forward pass through generator
+        # returns a (batch_size, input_dim) output
         self.generated = self.generate()
 
         # get the predictions from the discriminator
+        # returns a (batch_size, 1) output
         self.gen_predictions = self.discriminate(self.generated)
 
         # formulate the loss
@@ -57,6 +60,7 @@ class AdversarialNets(object):
 
     def _build_dis_graph(self):
         # forward pass through generator to get predictions
+        # returns a (batch_size, 1) output
         self.predictions = self.discriminate(self.inputs)
 
         # get the loss value
@@ -75,43 +79,45 @@ class AdversarialNets(object):
         # unpack values for easier reference
         batch_size = self._opts.batch_size
         input_dim = self._opts.fake_input_dim
+        z_dim = self._opts.z_dim
         num_hidden = self._opts.num_hidden
 
         # network
         # input-to-hidden
-        gW1 = tf.get_variable('gW1', [input_dim, num_hidden], initializer=tf.random_uniform)
+        gW1 = tf.get_variable('gW1', [z_dim, num_hidden])
         gb1 = tf.get_variable('gb1', [num_hidden])
         h = tf.nn.tanh(tf.matmul(self.z, gW1) + gb1)
+
         # hidden-to-output
-        gW2 = tf.get_variable('gW2', [num_hidden, input_dim], initializer=tf.random_uniform)
+        gW2 = tf.get_variable('gW2', [num_hidden, input_dim])
         gb2 = tf.get_variable('gb2', [input_dim])
-        self.generated = tf.matmul(h, gW2) + gb2
+        self.generated = tf.nn.tanh(tf.matmul(h, gW2) + gb2)
 
         return self.generated
 
-    def discriminate(self, inputs):
+    def discriminate(self, inputs, trainable=True):
         # unpack values for easier reference
         batch_size = self._opts.batch_size
         input_dim = self._opts.fake_input_dim
         num_hidden = self._opts.num_hidden
 
         # input-to-hidden
-        dW1 = tf.get_variable('dW1', [input_dim, num_hidden], initializer=tf.random_uniform)
+        dW1 = tf.get_variable('dW1', [input_dim, num_hidden])
         db1 = tf.get_variable('db1', [num_hidden])
         h = tf.nn.tanh(tf.matmul(inputs, dW1) + db1)
+
         # hidden-to-output
-        dW2 = tf.get_variable('dW2', [num_hidden, 2], initializer=tf.random_uniform)
-        db2 = tf.get_variable('db2', [2])
-        predictions = tf.matmul(h, dW2) + db2
+        dW2 = tf.get_variable('dW2', [num_hidden, 1])
+        db2 = tf.get_variable('db2', [1])
+        predictions = tf.nn.tanh(tf.matmul(h, dW2) + db2)
 
         return predictions
 
     def gen_train_loss(self, predictions):
-        return tf.reduce_mean(-predictions)
+        return tf.nn.sigmoid_cross_entropy_with_logits(predictions, tf.ones_like(predictions))
 
     def dis_train_loss(self, predictions):
-        return tf.reduce_mean(tf.square(self.targets - predictions))
-        # return tf.nn.sigmoid_cross_entropy_with_logits(predictions, self.targets)
+        return tf.nn.sigmoid_cross_entropy_with_logits(predictions, self.targets)
 
     def gen_val_loss(self, predictions):
         pass
@@ -143,10 +149,9 @@ class AdversarialNets(object):
 
         self._train_dis = opt.minimize(reg_loss + loss)
 
-
     def get_z(self):
-        z = np.random.randn((self._opts.batch_size * self._opts.fake_input_dim))
-        return z.reshape(self._opts.batch_size, self._opts.fake_input_dim)
+        z = np.random.uniform(-1, 1, size=(self._opts.batch_size, self._opts.z_dim))
+        return z
 
     def train_generator(self, validation=False):
         losses = []
@@ -163,27 +168,18 @@ class AdversarialNets(object):
                 loss_out = self._sess.run([self.gen_val_loss_out], feed_dict=feed)
             else: 
                 # perform the actual training step if training
-                _, loss_out, generateds, preds = self._sess.run([self._train_gen, 
-                            self.gen_train_loss_out, self.generated, self.gen_predictions], feed_dict=feed)
+                output_values = [self._train_gen, self.gen_train_loss_out, self.generated]
+                _, loss_out, generated = self._sess.run(output_values, feed_dict=feed)
 
-            self._dataset.add_generated_samples(generateds)
-
+            self._dataset.add_generated_samples(generated)
             losses.append(loss_out)
-
-        self.epoch += 1
 
         return losses
 
     def train_discriminator(self, validation=False):
         losses = []
 
-        num_batches = self._opts.fake_num_samples / self._opts.batch_size
-        for bidx in range(num_batches):
-            inputs, targets = self._dataset.next_batch(validation)
-
-            print inputs
-            print targets
-            raw_input()
+        for inputs, targets, in self._dataset.next_batch():
 
             # build the dict to feed inputs to graph
             feed = {}
@@ -195,13 +191,12 @@ class AdversarialNets(object):
                 loss_out = self._sess.run([self.dis_val_loss_out], feed_dict=feed)
             else: 
                 # perform the actual training step if training
-                _, loss_out, preds = self._sess.run([self._train_dis, self.dis_train_loss_out, self.predictions],
-                    feed_dict=feed)
+                output_values = [self._train_dis, self.dis_train_loss_out]
+                _, loss_out = self._sess.run(output_values, feed_dict=feed)
             
             losses.append(loss_out)
 
         self.epoch += 1
-
         return losses
         
     def run_epoch(self, validation=False):
@@ -218,7 +213,7 @@ class AdversarialNets(object):
         mean_dis_loss = np.mean(dis_losses_out)
 
         if validation:
-            print('val epoch: {}\tgen loss: {}\tdis loss: {}'.format(self.epoch - 1, 
+            print('val epoch: {}\tgen loss: {}\tdis loss: {}'.format(self.epoch, 
                     mean_gen_loss, mean_dis_loss))
             self.val_gen_losses.append(mean_gen_loss)
             self.val_dis_losses.append(mean_dis_loss)
@@ -231,14 +226,31 @@ class AdversarialNets(object):
     def plot_results(self):
         plt.plot(np.array(self.train_gen_losses), c='blue', linestyle='solid',
             label='training gen loss')
-        plt.plot(np.array(self.train_dis_losses), c='red', linestyle='dashdot', 
+        plt.plot(np.array(self.train_dis_losses), c='red', linestyle='solid', 
             label='training dis loss')
-        plt.plot(np.array(self.val_gen_losses), c='blue', linestyle='solid',
+        plt.plot(np.array(self.val_gen_losses), c='blue', linestyle='dashdot',
             label='validation gen loss')
         plt.plot(np.array(self.val_dis_losses), c='red', linestyle='dashdot', 
             label='validation dis loss')
         plt.legend()
         plt.show()
+
+    def sample_space(self):
+        """
+        Generates samples linearly from z space.
+        """
+        batch_size = self._opts.batch_size
+        steps = 5 * batch_size
+        space = np.linspace(-1, 1, steps).reshape(-1, batch_size, 1)
+        samples = []
+        for batch in space:
+            feed = {self.z: batch}
+            generated_samples = self._sess.run([self.generated], feed_dict=feed)
+            samples += generated_samples[0].tolist()
+
+        return np.array(samples)
+            
+
 
 
 

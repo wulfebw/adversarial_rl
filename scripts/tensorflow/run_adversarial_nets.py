@@ -11,16 +11,17 @@ flags.DEFINE_string("save_path", None, "Directory to save model")
 flags.DEFINE_string("train_data", None, "Training text file.")
 flags.DEFINE_string("val_data", None, "Validation text file.")
 flags.DEFINE_integer("epochs_to_train", 45, "Number of epochs to train.")
-flags.DEFINE_float("learning_rate", 0.05, "Initial learning rate.")
-flags.DEFINE_integer("batch_size", 2, "Number of training examples per batch.")
+flags.DEFINE_float("learning_rate", 0.01, "Initial learning rate.")
+flags.DEFINE_integer("batch_size", 4, "Number of training examples per batch.")
 flags.DEFINE_integer("statistics_interval", 5, "Print statistics every n seconds.")
 flags.DEFINE_integer("summary_interval", 5, "Save training summary every n seconds.")
 flags.DEFINE_integer("snapshot_interval", 600, "Snapshot the model every n seconds.")
-flags.DEFINE_integer("num_hidden", 25, "Number of hidden units in each layer.")
+flags.DEFINE_integer("num_hidden", 5, "Number of hidden units in each layer.")
+flags.DEFINE_integer("z_dim", 1, "dimension of generator z input.")
 flags.DEFINE_float("grad_clip", 1., "Value to clip gradients to.")
 flags.DEFINE_float("reg_scale", 0., "Regularization constant.")
 flags.DEFINE_boolean("run_val", False, "Whether to run validation.")
-flags.DEFINE_integer("fake_num_samples", 10, "Number of fake samples to make.")
+flags.DEFINE_integer("fake_num_samples", 1000, "Number of fake samples to make.")
 flags.DEFINE_integer("fake_sequence_length", 10, "Sequence length of fake examples.")
 flags.DEFINE_integer("fake_input_dim", 2, "Input dimension of fake examples.")
 flags.DEFINE_integer("fake_val_ratio", 2, "How many times fewer samples in fake val.")
@@ -71,6 +72,9 @@ class Options(object):
 
     # number of hidden units in the rnn layers
     self.num_hidden = FLAGS.num_hidden
+
+    # number of hidden units in the rnn layers
+    self.z_dim = FLAGS.z_dim
 
     # number of fake examples to make
     self.fake_num_samples = FLAGS.fake_num_samples
