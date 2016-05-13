@@ -1,0 +1,1 @@
+put files "titles.p", "recaps.p", "gameDB.p" in this directory

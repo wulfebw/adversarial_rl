@@ -73,3 +73,4 @@ docs/_build/
 *.meta
 *.p
 *.csv
+*checkpoint

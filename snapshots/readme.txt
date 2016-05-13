@@ -1,0 +1,1 @@
+put weight snapshots in this directory
