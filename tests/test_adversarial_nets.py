@@ -84,9 +84,6 @@ class TestAdversarialNets(unittest.TestCase):
     def test_run_epoch(self):
         """
         Test with both training.
-
-        only giving x values of 1 right now?
-
         """
         np.random.seed(1)
         opts = TestOptions()

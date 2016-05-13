@@ -67,3 +67,9 @@ docs/_build/
 
 # aws keys
 *.key
+
+# data
+*.weights
+*.meta
+*.p
+*.csv
