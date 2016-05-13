@@ -11,6 +11,7 @@ flags.DEFINE_string("save_path", None, "Directory to save model")
 flags.DEFINE_string("train_data", None, "Training text file.")
 flags.DEFINE_string("val_data", None, "Validation text file.")
 flags.DEFINE_integer("epochs_to_train", 45, "Number of epochs to train.")
+flags.DEFINE_integer("train_ratio", 5, "Ratio of discrim training batches to gen batches.")
 flags.DEFINE_float("learning_rate", 0.01, "Initial learning rate.")
 flags.DEFINE_integer("batch_size", 4, "Number of training examples per batch.")
 flags.DEFINE_integer("statistics_interval", 5, "Print statistics every n seconds.")
@@ -19,6 +20,7 @@ flags.DEFINE_integer("snapshot_interval", 600, "Snapshot the model every n secon
 flags.DEFINE_integer("num_hidden", 5, "Number of hidden units in each layer.")
 flags.DEFINE_integer("z_dim", 1, "dimension of generator z input.")
 flags.DEFINE_float("grad_clip", 1., "Value to clip gradients to.")
+flags.DEFINE_float("dropout", 0.9, "Probability to keep units")
 flags.DEFINE_float("reg_scale", 0., "Regularization constant.")
 flags.DEFINE_boolean("run_val", False, "Whether to run validation.")
 flags.DEFINE_integer("fake_num_samples", 1000, "Number of fake samples to make.")
@@ -46,6 +48,9 @@ class Options(object):
     # Number of epochs to train. 
     self.epochs_to_train = FLAGS.epochs_to_train
 
+    # ratio of # discrim to generative training batches
+    self.train_ratio = FLAGS.train_ratio
+
     # The initial learning rate.
     self.learning_rate = FLAGS.learning_rate
 
@@ -63,6 +68,9 @@ class Options(object):
 
     # value to clip gradients to
     self.grad_clip = FLAGS.grad_clip
+
+    # probability to keep units
+    self.dropout = FLAGS.dropout
 
     # scaling constant for l2 penalty
     self.reg_scale = FLAGS.reg_scale

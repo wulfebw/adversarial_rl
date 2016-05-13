@@ -1,4 +1,5 @@
 
+import math
 import numpy as np
 
 class FakeSeqToSeqDataSet(object):
@@ -135,7 +136,8 @@ class FakeAdversarialDataset(object):
 
             yield inputs, targets
 
-        self.reset_generated_samples()
+        # if reset:
+        #     self.reset_generated_samples()
 
     def add_generated_samples(self, samples):
         """
@@ -185,12 +187,74 @@ class FakeAdversarialDataset(object):
         Note that this is not a sequential dataset for now. Each example is just
         a single word.
         """
+        np.random.seed(1)
         data = {}
         num_samples = self._opts.fake_num_samples
 
-        X_train = np.tile([1,0], (num_samples, 1))
+        # X_train = self._make_normal_dataset()
+        X_train = self._make_one_zero_dataset()
+        # X_train = self._make_square_dataset()
         data['X_train'] = X_train
-        X_val = np.tile([1,0], (num_samples / self._opts.fake_val_ratio, 1))
-        data['X_val'] = X_val
+        
+        # X_val = np.tile([1,0], (num_samples / self._opts.fake_val_ratio, 1))
+        # data['X_val'] = X_val
         self.data = data
+
+    def _make_one_zero_dataset(self):
+        num_samples = self._opts.fake_num_samples
+        return np.tile([1,0], (num_samples, 1))
+
+    def _make_normal_dataset(self):
+        """
+        best hyperparams:
+        opts.learning_rate = .001
+        opts.train_ratio = 2
+        opts.fake_num_samples = 128
+        opts.epochs_to_train = 200
+        opts.num_hidden = 100
+        opts.z_dim = 2
+        opts.reg_scale = 0
+        opts.dropout = 1
+        """
+        num_samples = self._opts.fake_num_samples
+        mean = 0
+        std = 1
+
+        def get_normal(x):
+            return 1 / math.sqrt(math.pi * 2) * math.exp(-(x - mean) ** 2 / (2 * std ** 2))
+
+        xs = np.linspace(-4, 4, num_samples)
+        inputs = np.array([[x, get_normal(x)] for x in xs])
+        permuted_inputs = np.random.permutation(inputs)
+        return permuted_inputs
+
+    def _make_square_dataset(self):
+        """
+        best hyperparams:
+        opts.learning_rate = .00008 
+        opts.train_ratio = 5 
+        opts.fake_num_samples = 32 
+        opts.epochs_to_train = 300 
+        opts.num_hidden = 200 
+        opts.z_dim = 2
+        opts.reg_scale = 0 
+        opts.dropout = 1
+        """
+        num_samples = self._opts.fake_num_samples
+        # do it by edges of square:
+        side_length = 5
+        edge = np.linspace(0, side_length, num_samples/4)
+        bot = np.array([np.array([e, 0]) for e in edge])
+        top = np.array([np.array([e, side_length]) for e in edge])
+        left = np.array([np.array([0, e]) for e in edge])
+        right = np.array([np.array([side_length, e]) for e in edge])
+        inputs = np.vstack((bot, top, left, right))
+        permuted_inputs = np.random.permutation(inputs)
+        return permuted_inputs
+
+
+
+
+
+
 

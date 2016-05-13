@@ -17,7 +17,7 @@ class TestOptions(object):
     def __init__(self):
         self.fake_num_samples = 1000
         self.fake_val_ratio = 2
-        self.batch_size = 4
+        self.batch_size = 8
         self.fake_input_dim = 2
         self.epochs_to_train = 20
         self.learning_rate = .1
@@ -84,27 +84,38 @@ class TestAdversarialNets(unittest.TestCase):
     def test_run_epoch(self):
         """
         Test with both training.
+
+        only giving x values of 1 right now?
+
         """
+        np.random.seed(1)
         opts = TestOptions()
-        opts.learning_rate = .0001
-        opts.fake_num_samples = 100
-        opts.epochs_to_train = 100
-        opts.num_hidden = 200
+        opts.learning_rate = .0001 # .001
+        opts.train_ratio = 5 # 2
+        opts.fake_num_samples = 64 # 128
+        opts.epochs_to_train = 100 # 500
+        opts.num_hidden = 100 # 100
+        opts.z_dim = 2 # 2
+        opts.reg_scale = 0 # 0
+        opts.dropout = 1 # 1
         with tf.Session() as session:
             dataset = datasets.FakeAdversarialDataset(opts)
             model = adversarial_nets.AdversarialNets(opts, session, dataset)
 
-            # train only the generator
             losses = []
             for epoch in range(opts.epochs_to_train):
                 model.run_epoch()  
 
             samples = model.sample_space()
+            true_samples = model._dataset.data['X_train']
             print samples
 
         if SHOW_PLOTS:
             model.plot_results()
-            plt.scatter(samples[:, 0], samples[:, 1], c=np.arange(len(samples)))
+            plt.scatter(samples[:, 0], samples[:, 1], c='red')
+            plt.scatter(true_samples[:, 0], true_samples[:, 1], c='blue')
+            plt.xlim([0,2])
+            plt.ylim([-1,1])
             plt.show()
 
 
