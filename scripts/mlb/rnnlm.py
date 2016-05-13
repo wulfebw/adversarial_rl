@@ -8,6 +8,8 @@ import tensorflow as tf
 from tensorflow.python.ops.seq2seq import sequence_loss
 import time
 
+TITLE_FILEPATH = '/Users/wulfebw/Dropbox/School/Stanford/spring_2016/cs224d/project/data/game_summarization/title_words.csv'
+
 def mlb_iterator(raw_data, batch_size, num_steps):
   raw_data = np.array(raw_data, dtype=np.int32)
   data_len = len(raw_data)
@@ -24,7 +26,7 @@ def mlb_iterator(raw_data, batch_size, num_steps):
     yield (x, y)
 
 def get_mlb_dataset():
-    input_filepath = '/Users/wulfebw/Dropbox/School/Stanford/spring_2016/cs224d/project/data/game_summarization/title_words.csv'
+    input_filepath = TITLE_FILEPATH
     with open(input_filepath, 'rb') as infile:
         csvreader = csv.reader(infile, delimiter=' ')
         for row in csvreader:
