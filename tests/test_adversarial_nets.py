@@ -87,11 +87,11 @@ class TestAdversarialNets(unittest.TestCase):
         """
         np.random.seed(1)
         opts = TestOptions()
-        opts.learning_rate = .0001 # .001
-        opts.train_ratio = 5 # 2
-        opts.fake_num_samples = 64 # 128
-        opts.epochs_to_train = 100 # 500
-        opts.num_hidden = 100 # 100
+        opts.learning_rate = .00001 # .001
+        opts.train_ratio = 3 # 2
+        opts.fake_num_samples = 128 # 128
+        opts.epochs_to_train = 1000 # 500
+        opts.num_hidden = 512 # 100
         opts.z_dim = 2 # 2
         opts.reg_scale = 0 # 0
         opts.dropout = 1 # 1
@@ -111,8 +111,8 @@ class TestAdversarialNets(unittest.TestCase):
             model.plot_results()
             plt.scatter(samples[:, 0], samples[:, 1], c='red')
             plt.scatter(true_samples[:, 0], true_samples[:, 1], c='blue')
-            plt.xlim([0,2])
-            plt.ylim([-1,1])
+            # plt.xlim([0,2])
+            # plt.ylim([-1,1])
             plt.show()
 
 

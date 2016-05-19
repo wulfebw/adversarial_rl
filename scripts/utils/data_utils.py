@@ -8,10 +8,10 @@ import os
 import pickle
 import sys
 
-DATA_DIR = '../game_summarization'
-TITLE_TOKENS_FILENAME = 'titles.p'
-TITLE_NUMERIC_LABLES_FILENAME = 'title_numeric.csv'
-TITLE_WORD_LABLES_FILENAME = 'title_words.csv'
+DATA_DIR = '/Users/wulfebw/Dropbox/School/Stanford/spring_2016/cs224d/project/data/game_summarization/'
+TOKENS_FILENAME = 'recaps.p'
+NUMERIC_LABLES_FILENAME = 'title_numeric.csv'
+WORD_LABLES_FILENAME = 'recaps_words.csv'
 
 def plot_word_count_histogram():
     # plt.hist(vocab.values(), 1000)
@@ -75,6 +75,8 @@ def convert_tokens_to_numeric_labels(input_filepath, output_filepath):
             outfile.write('\n')
 
 if __name__ == '__main__':
-    title_tokens_filepath = os.path.join(DATA_DIR, TITLE_TOKENS_FILENAME)
-    title_numeric_labels_output_filepath = os.path.join(DATA_DIR, TITLE_WORD_LABLES_FILENAME)
-    convert_tokens_to_numeric_labels(title_tokens_filepath, title_numeric_labels_output_filepath)
+    tokens_filepath = os.path.join(DATA_DIR, TOKENS_FILENAME)
+    output_filepath = os.path.join(DATA_DIR, WORD_LABLES_FILENAME)
+    convert_tokens_to_numeric_labels(tokens_filepath, output_filepath)
+
+    

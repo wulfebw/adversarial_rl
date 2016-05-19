@@ -192,8 +192,8 @@ class FakeAdversarialDataset(object):
         num_samples = self._opts.fake_num_samples
 
         # X_train = self._make_normal_dataset()
-        X_train = self._make_one_zero_dataset()
-        # X_train = self._make_square_dataset()
+        # X_train = self._make_one_zero_dataset()
+        X_train = self._make_square_dataset()
         data['X_train'] = X_train
         
         # X_val = np.tile([1,0], (num_samples / self._opts.fake_val_ratio, 1))
