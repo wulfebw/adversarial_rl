@@ -1,5 +1,6 @@
 
 import math
+import matplotlib.pyplot as plt
 import numpy as np
 
 class FakeSeqToSeqDataSet(object):
@@ -92,7 +93,6 @@ class FakeAdversarialDataset(object):
     def __init__(self, opts):
         self._opts = opts
         self._make_fake_dataset()
-        self._index_in_epoch = 0
         self.epoch = 0
 
     def next_batch(self, validation=False):
@@ -225,6 +225,7 @@ class FakeAdversarialDataset(object):
 
         xs = np.linspace(-4, 4, num_samples)
         inputs = np.array([[x, get_normal(x)] for x in xs])
+        # permuting is really important
         permuted_inputs = np.random.permutation(inputs)
         return permuted_inputs
 
@@ -252,9 +253,127 @@ class FakeAdversarialDataset(object):
         permuted_inputs = np.random.permutation(inputs)
         return permuted_inputs
 
+class FakeRecurrentAdversarialDataset(object):
 
+    def __init__(self, opts):
+        self._opts = opts
+        self._make_fake_dataset()
+        self.epoch = 0
 
+    def next_batch(self, validation=False):
+        """
+        Returns a batch of data consisting of both "real" data from the 
+        original dataset created during initialization as well as data
+        from the generative model.
+        """
 
+        # get the data
+        X = self.data["X_val"] if validation else self.data["X_train"] 
+        generated_samples = self.data["generated_samples"]
 
+        # decide how many batches there will be
+        # because each batch is half real and half fake
+        # the number of batches will be 2 times the number
+        # of batches in the smaller collection
+        num_samples = min(len(X), len(generated_samples))
+        num_batches = (2 * num_samples) / self._opts.batch_size 
+
+        # go through all the batches collecting real and 
+        # fake data and yielding it
+        for bidx in range(num_batches):
+            # effective batch size is real batch_size / 2
+            effective_batch_size = self._opts.batch_size / 2
+            # start and end indices
+            start = bidx * effective_batch_size
+            end = (bidx + 1) * effective_batch_size
+
+            # real data
+            real_x_batch = X[start:end]
+            real_y = np.ones((effective_batch_size, 1))
+
+            # fake data
+            fake_x_batch = generated_samples[start:end]
+            fake_y = np.zeros((effective_batch_size, 1))
+
+            # combine the two
+            inputs = np.vstack((real_x_batch, fake_x_batch))
+            targets = np.vstack((real_y, fake_y))
+
+            yield inputs, targets
+
+    def add_generated_samples(self, samples):
+        """
+        Training proceeds in two steps. First, we train G by generating samples
+        and having D provide a reward for them. We store these samples for
+        later use in training D, which is the purpose of this function - it
+        stores the generated samples in order to use them for trainin D. 
+
+        The second step in training is to train D, which, as stated, uses these
+        stored, generated values, but it also uses the fake dataset created 
+        during initialization.
+
+        The generated samples list is cleared after each epoch.
+
+        Parameters:
+        - samples is of shape (batch_size, input_dim)
+        """
+        if 'generated_samples' not in self.data:
+            self.data['generated_samples'] = []
+        assert samples.shape == (self._opts.batch_size, self._opts.sequence_length, self._opts.input_dim)
+
+        if self.data['generated_samples'] == []:
+            self.data['generated_samples'] = samples
+        else:
+            self.data['generated_samples'] = np.vstack((self.data['generated_samples'], samples))
+
+    def reset_generated_samples(self):
+        """
+        Resets the list of generated data. 
+        """
+        self.data['generated_samples'] = []
+
+    def _make_fake_dataset(self):
+        """
+        Makes a fake dataset consisting of discrete valued data. The dataset
+        above also does this, but it was treated like real valued data. This
+        dataset is also much simpler in that it consists of samples from a 
+        two word vocabulary ([1,0] and [0,1]), where all those samples are
+        of the first word ([1,0]).
+
+        The goal is see if the generator network can learn to generate this 
+        first word ([1,0]) from noise data. It should obviously be able to 
+        do this by just setting the bias terms and ignoring the noise. What is
+        of interest is the training mechanism, discussed in the file containing
+        the adversarial network implementation.
+
+        Note that this is not a sequential dataset for now. Each example is just
+        a single word.
+        """
+        np.random.seed(1)
+        data = {}
+        num_samples = self._opts.num_samples
+
+        X_train = self._make_sine_dataset()
+        data['X_train'] = X_train
+        
+        self.data = data
+
+    def _make_sine_dataset(self):
+        """
+        make a sin dataset with num_samples, each of sequence_length, where
+        each timestep of the seqeunce contains two elements:
+        x: just the x position
+        y: the sine of x
+
+        so z is of shape (num_samples, sequence_length, 2), and one example
+        would be [[0, 0], [pi/2, 1], [3/4pi, -1], [2pi, 0]]
+        """
+        num_samples = self._opts.num_samples
+        sequence_length = self._opts.sequence_length
+        x = np.linspace(-2 * np.pi, 2 * np.pi, num_samples * sequence_length)
+        y = np.sin(x)
+        z = np.vstack((x, y)).T.reshape(num_samples, sequence_length, 2)
+        z = np.random.permutation(z)
+        return z
 
 
