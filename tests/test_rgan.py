@@ -28,6 +28,7 @@ class TestOptions(object):
         self.num_hidden = 10
         self.train_ratio = 2
         self.z_dim = 2
+        self.dataset_name = 'sine'
 
 class TestRecurrentGenerativeAdversarialNetwork(unittest.TestCase):
 
@@ -92,31 +93,35 @@ class TestRecurrentGenerativeAdversarialNetwork(unittest.TestCase):
         Test with both training.
         """
         opts = TestOptions()
-        opts.learning_rate = .001 # .001
-        opts.batch_size = 4
-        opts.train_ratio = 10 # 2
+        opts.learning_rate = .00001 #.001
+        opts.batch_size = 8
+        opts.train_ratio = 4 # 2
         opts.num_samples = 16 # 128
-        opts.sequence_length = 4
-        opts.epochs_to_train = 400 # 500
-        opts.num_hidden = 64 # 100
+        opts.sequence_length = 20
+        opts.epochs_to_train = 2000 # 500
+        opts.num_hidden = 128 # 100
         opts.z_dim = 3 # 2
         opts.reg_scale = 0 # 0
-        opts.dropout = 1 # 1
+        opts.dropout = .9 # 1
+        opts.dataset_name = 'sine'
+
+        
 
         with tf.Session() as session:
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
             model = rgan.RecurrentGenerativeAdversarialNetwork(opts, session, dataset)
             saver = tf.train.Saver()
-            saver.restore(session, '../snapshots/sine.weights')
+            saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
 
             losses = []
-            train = True
-            if train == True:
+            
+            TRAIN = False
+            if TRAIN == True:
                 for epoch in range(opts.epochs_to_train):
                     model.run_epoch()  
 
                     if epoch % 50 == 0:
-                        saver.save(session, '../snapshots/sine.weights')
+                        saver.save(session, '../snapshots/{}.weights'.format(opts.dataset_name))
 
             samples = model.sample_space()
             true_samples = model.dataset.data['X_train']
@@ -124,7 +129,7 @@ class TestRecurrentGenerativeAdversarialNetwork(unittest.TestCase):
 
         with tf.Session() as session:
             if SHOW_PLOTS:
-                saver.restore(session, '../snapshots/sine.weights')
+                saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
                 model.plot_results()
 
                 fig, ax = plt.subplots()
@@ -134,7 +139,7 @@ class TestRecurrentGenerativeAdversarialNetwork(unittest.TestCase):
                     scat.set_offsets([])
                     return scat,
 
-                dots_to_show = 8
+                dots_to_show = opts.sequence_length
                 def animate(idx):
                     sample_idx = idx / opts.sequence_length
                     timestep_idx = idx % opts.sequence_length
@@ -146,11 +151,19 @@ class TestRecurrentGenerativeAdversarialNetwork(unittest.TestCase):
                     ax.scatter(true_samples[idx, :, 0], true_samples[idx, :, 1], c='blue')
 
                 animation_steps = len(samples) * opts.sequence_length
-                ani = animation.FuncAnimation(fig, animate, np.arange(animation_steps), interval=400,
+                ani = animation.FuncAnimation(fig, animate, np.arange(animation_steps), interval=10,
                             init_func=init)
-                plt.ylim([-10,10])
-                plt.xlim([-10,10])
                 plt.show()
+
+                for true in true_samples:
+                    plt.scatter(true[:, 0], true[:, 1], c='blue')
+
+                for gen in samples:
+                    plt.scatter(gen[:, 0], gen[:, 1], c='red')
+
+                plt.show()
+
+                #ani.save('../media/sine.gif', writer='imagemagick', fps=30)
 
 
 if __name__ == '__main__':

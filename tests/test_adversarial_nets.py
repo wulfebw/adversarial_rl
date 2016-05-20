@@ -87,11 +87,11 @@ class TestAdversarialNets(unittest.TestCase):
         """
         np.random.seed(1)
         opts = TestOptions()
-        opts.learning_rate = .00001 # .001
+        opts.learning_rate = .0001 # .001
         opts.train_ratio = 3 # 2
         opts.fake_num_samples = 128 # 128
-        opts.epochs_to_train = 1000 # 500
-        opts.num_hidden = 512 # 100
+        opts.epochs_to_train = 10 # 500
+        opts.num_hidden = 256 # 100
         opts.z_dim = 2 # 2
         opts.reg_scale = 0 # 0
         opts.dropout = 1 # 1

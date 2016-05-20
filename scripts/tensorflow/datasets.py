@@ -353,7 +353,12 @@ class FakeRecurrentAdversarialDataset(object):
         data = {}
         num_samples = self._opts.num_samples
 
-        X_train = self._make_sine_dataset()
+        if self._opts.dataset_name == 'sine':
+            X_train = self._make_sine_dataset()
+        elif self._opts.dataset_name == 'circle':
+            X_train = self._make_circle_dataset()
+        else:
+            raise ValueError("invalid dataset name: {}".format(self._opts.dataset_name))
         data['X_train'] = X_train
         
         self.data = data
@@ -370,10 +375,37 @@ class FakeRecurrentAdversarialDataset(object):
         """
         num_samples = self._opts.num_samples
         sequence_length = self._opts.sequence_length
-        x = np.linspace(-2 * np.pi, 2 * np.pi, num_samples * sequence_length)
-        y = np.sin(x)
+        stretch = 1
+        x = np.linspace(-2 * np.pi * stretch, 2 * np.pi * stretch, num_samples * sequence_length)
+        y = np.sin(x / stretch)
         z = np.vstack((x, y)).T.reshape(num_samples, sequence_length, 2)
         z = np.random.permutation(z)
         return z
+
+    def _make_circle_dataset(self):
+        """
+        This is a dataset consisting of subsequences of a circles in counterclockwise order.
+        """
+        radius = 1
+        origin = (0, 0)
+        dataset = np.zeros((self._opts.num_samples * self._opts.sequence_length, 2))
+        angles = np.linspace(0, 2 * np.pi, self._opts.num_samples * self._opts.sequence_length)
+        for idx, angle in enumerate(angles):
+            x = np.cos(angle) * radius + origin[0]
+            y = np.sin(angle) * radius + origin[1]
+            dataset[idx, :] = [x, y]
+        dataset = dataset.reshape(self._opts.num_samples, self._opts.sequence_length, 2)
+        dataset = np.random.permutation(dataset)
+        return dataset
+
+
+
+
+
+
+
+
+
+
 
 

@@ -57,6 +57,32 @@ class TestFakeRecurrentAdversarialDataset(unittest.TestCase):
         self.assertEquals(len(d.data['X_train']), opts.num_samples)
         self.assertEquals(len(d.data['X_train'][0]), opts.sequence_length)
 
+    def test_circle_dataset(self):
+        opts = TestOptions()
+        opts.sequence_length = 4
+        opts.num_samples = 4
+        opts.batch_size = 4
+        opts.input_dim = 2
+        d = datasets.FakeRecurrentAdversarialDataset(opts)
+        fake_batch = np.arange((opts.batch_size * opts.sequence_length * opts.input_dim))
+        fake_batch = fake_batch.reshape(opts.batch_size, opts.sequence_length, opts.input_dim)
+        d.add_generated_samples(fake_batch)
+
+        z = d.data['X_train']
+        for sidx in range(opts.num_samples):
+            plt.plot(z[sidx, :, 0], z[sidx, :, 1])
+
+        y = d.data['generated_samples']
+        for sidx in range(len(y)):
+            plt.plot(y[sidx, :, 0], y[sidx, :, 1])
+
+        for x, y in d.next_batch():
+            print x
+            print y
+
+        if SHOW_PLOTS:
+            plt.show()
+
     def test_add_generated_samples(self):
         opts = TestOptions()
         opts.sequence_length = 2

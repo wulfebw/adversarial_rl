@@ -1,5 +1,8 @@
 """
-Adversarial networks implementation
+Recurrent Generative Adversarial Network implementation.
+
+ideas:
+- maybe pass the std dev across the real/fake batch to the discriminator 
 """
 
 import matplotlib.pyplot as plt
@@ -7,7 +10,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn, seq2seq
 
-Z_LIM = np.pi * 2
+Z_LIM = np.pi * 2 * 2
 
 class RecurrentGenerativeAdversarialNetwork(object):
 
@@ -137,6 +140,7 @@ class RecurrentGenerativeAdversarialNetwork(object):
         lstm = rnn.rnn_cell.BasicLSTMCell(num_hidden)
 
         # compute initial hidden state using sampled z value
+        # with tf.variable_scope("grnn") as scope:
         gWz = tf.get_variable('gWz', [z_dim, lstm.state_size])
         gbz = tf.get_variable('gbz', [lstm.state_size])
         cell_state = tf.nn.tanh(tf.matmul(self.z_placeholder, gWz) + gbz)
@@ -159,8 +163,10 @@ class RecurrentGenerativeAdversarialNetwork(object):
                 gbo = tf.get_variable("gbo", (input_dim, ), initializer=tf.zeros)
 
                 next_input = tf.nn.tanh(tf.matmul(prev_output, gWi) + gbi)
-                hidden_state, cell_state = lstm(next_input, cell_state)
-                prev_output = tf.matmul(hidden_state, gWo) + gbo
+                next_input_drop = tf.nn.dropout(next_input, self.dropout_placeholder)
+                hidden_state, cell_state = lstm(next_input_drop, cell_state)
+                hidden_state_drop = tf.nn.dropout(hidden_state, self.dropout_placeholder)
+                prev_output = tf.matmul(hidden_state_drop, gWo) + gbo
 
             # insert a dimension into the output to be used as concatenation dim
             rnn_outputs.append(tf.expand_dims(prev_output, 1))
@@ -227,12 +233,10 @@ class RecurrentGenerativeAdversarialNetwork(object):
         return loss
 
     def gen_optimize(self, loss):
-        # define optimizer
         opt = tf.train.AdamOptimizer(self.opts.learning_rate)
         self._train_gen = opt.minimize(loss)
 
     def dis_optimize(self, loss):
-        # define optimizer
         opt = tf.train.AdamOptimizer(self.opts.learning_rate)
         self._train_dis = opt.minimize(loss)
 
