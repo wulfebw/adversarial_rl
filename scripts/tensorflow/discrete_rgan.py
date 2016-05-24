@@ -1,8 +1,11 @@
 """
-Recurrent Generative Adversarial Network implementation.
+DOES NOT WORK. IS NOT SUPPOSED TO WORK.
 
-ideas:
-- discriminator generates score for each timestep?
+This is a test model put together to show that a GAN performing 
+discrete sampling of it's output will not learn anything 
+because that sampling procedure is not differentiable. 
+This problem is solved by training the GAN with policy gradient 
+methods as shown in a different file.
 """
 
 import matplotlib.pyplot as plt
@@ -12,7 +15,12 @@ from tensorflow.python.ops import rnn, seq2seq
 
 import learning_utils
 
-class RecurrentGenerativeAdversarialNetwork(object):
+class RecurrentDiscreteGenerativeAdversarialNetwork(object):
+    """
+    GAN implementation for DISCRETE output. This model does 
+    and should not work because the sampling procedure is 
+    not differentiable. 
+    """
 
     def __init__(self, options, session, dataset):
         self.opts = options

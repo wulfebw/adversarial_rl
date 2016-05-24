@@ -9,7 +9,7 @@ import unittest
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, 'scripts/tensorflow')))
 
 import datasets
-import policy_gradient_rgan
+import discrete_rgan
 
 SHOW_PLOTS = True
 
@@ -32,7 +32,7 @@ class TestOptions(object):
         self.discrete = True
         self.num_samples = 10
 
-class TestPolicyGradientRecurrentGenerativeAdversarialNetwork(unittest.TestCase):
+class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
     def test_train_generator(self):
         """
@@ -42,7 +42,7 @@ class TestPolicyGradientRecurrentGenerativeAdversarialNetwork(unittest.TestCase)
         opts = TestOptions()
         with tf.Session() as session:
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
-            model = policy_gradient_rgan.RecurrentGenerativeAdversarialNetwork(opts, session, dataset)
+            model = discrete_rgan.RecurrentDiscreteGenerativeAdversarialNetwork(opts, session, dataset)
 
             # train only the generator
             losses = []
@@ -67,7 +67,7 @@ class TestPolicyGradientRecurrentGenerativeAdversarialNetwork(unittest.TestCase)
         opts = TestOptions()
         with tf.Session() as session:
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
-            model = policy_gradient_rgan.RecurrentGenerativeAdversarialNetwork(opts, session, dataset)
+            model = discrete_rgan.RecurrentDiscreteGenerativeAdversarialNetwork(opts, session, dataset)
 
             # train only the generator
             losses = []
@@ -93,14 +93,14 @@ class TestPolicyGradientRecurrentGenerativeAdversarialNetwork(unittest.TestCase)
         """
         opts = TestOptions()    
         opts.learning_rate = .001
-        opts.epochs_to_train = 5000
+        opts.epochs_to_train = 50
         opts.num_hidden = 16
         opts.embed_dim = 4
         opts.dropout = 1 
 
         with tf.Session() as session:
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
-            model = policy_gradient_rgan.RecurrentGenerativeAdversarialNetwork(opts, session, dataset)
+            model = discrete_rgan.RecurrentDiscreteGenerativeAdversarialNetwork(opts, session, dataset)
             saver = tf.train.Saver()
             # saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
 
@@ -128,7 +128,7 @@ class TestPolicyGradientRecurrentGenerativeAdversarialNetwork(unittest.TestCase)
             for sample in samples:
                 if sample in true_samples:
                     in_real_data_count += 1
-
+            print "example generated data: {}".format(samples[:5])
             print "total samples: {}".format(total)
             print "fake samples in dataset: {}".format(in_real_data_count)
             print "percent in real dataset: {}".format(100 * in_real_data_count / total)
