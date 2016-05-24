@@ -94,25 +94,31 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts = TestOptions()    
         opts.learning_rate = .001
         opts.epochs_to_train = 50
-        opts.num_hidden = 16
-        opts.embed_dim = 4
+        opts.num_hidden = 2
+        opts.embed_dim = 2
         opts.dropout = 1 
 
         with tf.Session() as session:
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
             model = discrete_rgan.RecurrentDiscreteGenerativeAdversarialNetwork(opts, session, dataset)
             saver = tf.train.Saver()
-            # saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
+            saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
+
+            params = tf.trainable_variables()
+            param_info = sorted([(p.name, p.eval()) for p in params 
+                                if 'grnn' in p.name])
 
             losses = []
-            
             TRAIN = True
             if TRAIN == True:
                 for epoch in range(opts.epochs_to_train):
                     model.run_epoch()  
 
-                    if epoch % 10000 == 0:
+                    if epoch % 50 == 0:
                         saver.save(session, '../snapshots/{}.weights'.format(opts.dataset_name))
+
+
+
 
             if opts.discrete:
                 samples = model.discrete_sample_space()
@@ -135,6 +141,16 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
             if SHOW_PLOTS:
                 model.plot_results()
+
+            # assert that the parameters of the generative model have not changed
+            # at all because they cannot possibly change because they are blocked
+            # from any gradient by a nondifferentiable, discrete sampling operation
+            params_after = tf.trainable_variables()
+            param_after_info = sorted([(p.name, p.eval()) for p in params_after 
+                                        if 'grnn' in p.name])
+            for (n, vals), (n_after, vals_after) in zip(param_info, param_after_info):
+                self.assertEquals(n, n_after)
+                self.assertEquals(vals.flatten().tolist(), vals_after.flatten().tolist())
 
 if __name__ == '__main__':
     unittest.main()
