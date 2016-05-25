@@ -27,7 +27,7 @@ def batch_sample_with_temperature(arr, temperature=1.0):
         u = tf.random_uniform(tf.shape(arr), minval=0, maxval=1)
         sampled_idx = tf.argmax(tf.sub(x, u), dimension=1) 
         
-    return sampled_idx
+    return sampled_idx, x
 
 def reduce_std(arr, mean):
     """

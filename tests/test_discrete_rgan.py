@@ -92,43 +92,47 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         Test with both training.
         """
         opts = TestOptions()    
-        opts.learning_rate = .001
-        opts.epochs_to_train = 50
-        opts.num_hidden = 2
-        opts.embed_dim = 2
-        opts.dropout = 1 
+        opts.learning_rate = .005
+        opts.train_ratio = 3
+        opts.epochs_to_train = 200
+        opts.num_hidden = 64
+        opts.embed_dim = 16
+        opts.dropout = .9
+        opts.temperature = 1.0
 
         with tf.Session() as session:
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
             model = discrete_rgan.RecurrentDiscreteGenerativeAdversarialNetwork(opts, session, dataset)
             saver = tf.train.Saver()
-            saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
+            # saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
 
+            # get the param values beforehand
             params = tf.trainable_variables()
             param_info = sorted([(p.name, p.eval()) for p in params 
                                 if 'grnn' in p.name])
 
+            # train
             losses = []
             TRAIN = True
             if TRAIN == True:
                 for epoch in range(opts.epochs_to_train):
                     model.run_epoch()  
 
-                    if epoch % 50 == 0:
+                    if epoch % 100 == 0:
                         saver.save(session, '../snapshots/{}.weights'.format(opts.dataset_name))
 
-
-
-
+            # sample linearly from z space
             if opts.discrete:
                 samples = model.discrete_sample_space()
                 samples = dataset.decode_dataset(samples)
             else:
                 samples = model.sample_space()
 
+            # get the samples in the dataset
             true_samples = dataset.data['X_train']
             true_samples = dataset.decode_dataset(true_samples)
 
+            # calculate and report metric
             total = float(len(samples))
             in_real_data_count = 0
             for sample in samples:
@@ -137,7 +141,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             print "example generated data: {}".format(samples[:5])
             print "total samples: {}".format(total)
             print "fake samples in dataset: {}".format(in_real_data_count)
-            print "percent in real dataset: {}".format(100 * in_real_data_count / total)
+            print "percent in real dataset: {}%".format(100 * in_real_data_count / total)
 
             if SHOW_PLOTS:
                 model.plot_results()
@@ -148,9 +152,22 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             params_after = tf.trainable_variables()
             param_after_info = sorted([(p.name, p.eval()) for p in params_after 
                                         if 'grnn' in p.name])
+            total_diff = 0
+            total_num_params = 0
             for (n, vals), (n_after, vals_after) in zip(param_info, param_after_info):
-                self.assertEquals(n, n_after)
-                self.assertEquals(vals.flatten().tolist(), vals_after.flatten().tolist())
+                print "\n"
+                print n
+                print n_after
+                # print vals.flatten().tolist()
+                # print vals_after.flatten().tolist()
+                num_params = len(vals_after.flatten().tolist())
+                total_num_params += num_params
+                diffs = vals - vals_after
+                diff = np.sum(np.abs(diffs))
+                total_diff += diff
+                print "average absolute difference: {}%".format(diff / num_params * 100)
+
+            print "overall average absolute difference: {}%".format(total_diff / total_num_params * 100)
 
 if __name__ == '__main__':
     unittest.main()
