@@ -13,6 +13,7 @@ ideas:
 3. backprop reward at each timestep [check]
 4. reduce temperature over time [check]
 5. make separate discriminator? 
+6. gradient clipping
 """
 
 import matplotlib.pyplot as plt
@@ -69,10 +70,13 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
         # get the predictions from the discriminator
         # returns a (batch_size, 1) output
-        self.gen_scores = self.discriminate(self.generated)
+        self.gen_scores = self.discriminate(self.generated, reuse=False)
 
         # formulate the loss
         self.gen_train_loss_out = self.gen_train_loss(self.gen_scores)
+
+        # get generative parameters
+        self.g_params = [p for p in tf.trainable_variables() if 'g' in p.name]
 
         # create the gen train op
         if self.opts.full_sequence_optimization:
@@ -90,6 +94,9 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
         # get the loss value
         self.dis_train_loss_out = self.dis_train_loss(self.scores)
+
+        # get discriminative parameters
+        self.d_params = [p for p in tf.trainable_variables() if 'd' in p.name]
 
         # create the dis train op
         self.dis_optimize(self.dis_train_loss_out)
@@ -174,7 +181,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         timestep_probs = tf.concat(values=timestep_probs, concat_dim=1)
         return rnn_outputs, timestep_probs
 
-    def discriminate(self, labels, reuse=False):
+    def discriminate(self, labels, reuse):
         """
         Given a list of labels shape (batch_size, sequence_length),
         make a binary prediction as to whether each sequence in the batch is 
@@ -192,7 +199,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         vocab_dim = self.dataset.vocab_dim
 
         # get the embeddings for all the words at once
-        with tf.variable_scope("drnn", reuse=reuse) as scope:
+        with tf.variable_scope('drnn', reuse=reuse) as scope:
             # embedding matrix
             L = tf.get_variable('L', (vocab_dim, embed_dim))
 
@@ -211,7 +218,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         # used to make a decision on real vs fake
         rnn_scores = []
         for idx in range(sequence_length):
-            with tf.variable_scope("drnn") as scope:
+            with tf.variable_scope('drnn', reuse=reuse) as scope:
                 # first pass through, create the lstm  
                 if idx != 0 or reuse:
                     scope.reuse_variables() 
@@ -292,8 +299,11 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
         # option 2: treat the mean of grads as the loss and minimize it
         pgloss = tf.reduce_mean(grads)
-        opt = tf.train.AdamOptimizer(self.opts.learning_rate)        
-        self._train_gen = opt.minimize(pgloss)
+        opt = tf.train.AdamOptimizer(self.opts.learning_rate) 
+        # optimize only generative params o/w will also move the 
+        # discriminator's params, which actually works, but 
+        # is just incorrect       
+        self._train_gen = opt.minimize(pgloss, var_list=self.g_params)
 
     def gen_optimize_full_sequence(self, loss):
         batch_size = self.opts.batch_size
@@ -329,12 +339,15 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
             total_loss += timestep_loss
 
         # minimize the loss over the full sequence
-        opt = tf.train.AdamOptimizer(self.opts.learning_rate)        
-        self._train_gen = opt.minimize(total_loss)
+        opt = tf.train.AdamOptimizer(self.opts.learning_rate)   
+        # optimize only generative params o/w will also move the 
+        # discriminator's params, which actually works, but 
+        # is just incorrect            
+        self._train_gen = opt.minimize(total_loss, var_list=self.g_params)
 
     def dis_optimize(self, loss):
         opt = tf.train.AdamOptimizer(self.opts.learning_rate)
-        self._train_dis = opt.minimize(loss)
+        self._train_dis = opt.minimize(loss, var_list=self.d_params)
 
     def get_z(self):
         # pass in z noise only once at the beginning

@@ -318,6 +318,7 @@ class FakeRecurrentAdversarialDataset(object):
         Parameters:
         - samples is of shape (batch_size, input_dim)
         """
+
         if 'generated_samples' not in self.data:
             self.data['generated_samples'] = []
         assert samples.shape == (self._opts.batch_size, self._opts.sequence_length, self._opts.input_dim) or samples.shape == (self._opts.batch_size, self._opts.sequence_length)
@@ -415,7 +416,7 @@ class FakeRecurrentAdversarialDataset(object):
         """
         assert self._opts.sequence_length == 2 
         self.vocab_dim = 3
-        self._opts.num_samples = self.vocab_dim - 1
+        assert self._opts.num_samples / self.vocab_dim > 0
         self.label_to_word_dict = {}
 
         alphabet = []
@@ -424,9 +425,9 @@ class FakeRecurrentAdversarialDataset(object):
             alphabet.append(ch)
 
         X_train = []
-        for ch1, ch2 in zip(alphabet, alphabet[1:]):
+        for ch1, ch2 in zip(alphabet, alphabet[1:] + [alphabet[0]]):
             X_train.append([ch1, ch2])
-        X_train = np.array(X_train)      
+        X_train = np.tile(X_train, (self._opts.num_samples / 3, 1))    
         return X_train
 
     def decode(self, label):

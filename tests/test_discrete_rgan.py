@@ -92,13 +92,22 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         Test with both training.
         """
         opts = TestOptions()    
-        opts.learning_rate = .005
-        opts.train_ratio = 3
-        opts.epochs_to_train = 200
-        opts.num_hidden = 64
-        opts.embed_dim = 16
-        opts.dropout = .9
+        opts.learning_rate = .01
+        opts.train_ratio = 4
+        opts.batch_size = 8
+        opts.num_samples = 32
+        opts.epochs_to_train = 100
+        opts.num_hidden = 128
+        opts.embed_dim = 8
+        opts.z_dim = 2
+        opts.dropout = 1.0
         opts.temperature = 1.0
+        opts.sampling_temperature = .5
+        opts.full_sequence_optimization = True
+        opts.save_every = 200
+        opts.plot_every = 50
+        opts.reduce_temperature_every = 5
+        opts.temperature_reduction_amount = .01
 
         with tf.Session() as session:
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
@@ -108,8 +117,9 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
             # get the param values beforehand
             params = tf.trainable_variables()
-            param_info = sorted([(p.name, p.eval()) for p in params 
-                                if 'grnn' in p.name])
+            # param_info = sorted([(p.name, p.eval()) for p in params 
+            #                     if 'grnn' in p.name])
+            param_info = sorted([(p.name, p.eval()) for p in params])
 
             # train
             losses = []
@@ -118,12 +128,18 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
                 for epoch in range(opts.epochs_to_train):
                     model.run_epoch()  
 
-                    if epoch % 100 == 0:
+                    if epoch % opts.save_every == 0:
                         saver.save(session, '../snapshots/{}.weights'.format(opts.dataset_name))
+
+                    if epoch % opts.plot_every == 0:
+                        model.plot_results()
+
+                    if epoch % opts.reduce_temperature_every == 0:
+                        opts.temperature -= opts.temperature_reduction_amount
 
             # sample linearly from z space
             if opts.discrete:
-                samples = model.discrete_sample_space()
+                samples, probs = model.discrete_sample_space()
                 samples = dataset.decode_dataset(samples)
             else:
                 samples = model.sample_space()
@@ -138,10 +154,14 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             for sample in samples:
                 if sample in true_samples:
                     in_real_data_count += 1
-            print "example generated data: {}".format(samples[:5])
+
+            num_display = 10
+            for (s, p) in zip(samples[:num_display], probs[:num_display]):
+                print "example generated data: {}".format(s)
+                print "probabilities of those selections: {}".format(p)
             print "total samples: {}".format(total)
-            print "fake samples in dataset: {}".format(in_real_data_count)
-            print "percent in real dataset: {}%".format(100 * in_real_data_count / total)
+            print "generated samples also in dataset: {}".format(in_real_data_count)
+            print "percent generated in real dataset: {}%".format(100 * in_real_data_count / total)
 
             if SHOW_PLOTS:
                 model.plot_results()
@@ -150,8 +170,9 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             # at all because they cannot possibly change because they are blocked
             # from any gradient by a nondifferentiable, discrete sampling operation
             params_after = tf.trainable_variables()
-            param_after_info = sorted([(p.name, p.eval()) for p in params_after 
-                                        if 'grnn' in p.name])
+            # param_after_info = sorted([(p.name, p.eval()) for p in params_after 
+            #                             if 'grnn' in p.name])
+            param_after_info = sorted([(p.name, p.eval()) for p in params_after])
             total_diff = 0
             total_num_params = 0
             for (n, vals), (n_after, vals_after) in zip(param_info, param_after_info):
