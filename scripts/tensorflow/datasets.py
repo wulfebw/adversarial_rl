@@ -261,7 +261,7 @@ class FakeRecurrentAdversarialDataset(object):
         self._make_fake_dataset()
         self.epoch = 0
 
-    def next_batch(self, validation=False):
+    def next_batch(self):
         """
         Returns a batch of data consisting of both "real" data from the 
         original dataset created during initialization as well as data
@@ -269,7 +269,7 @@ class FakeRecurrentAdversarialDataset(object):
         """
 
         # get the data
-        X = self.data["X_val"] if validation else self.data["X_train"] 
+        X = self.data["X_train"] 
         generated_samples = self.data["generated_samples"]
 
         # decide how many batches there will be
@@ -410,24 +410,23 @@ class FakeRecurrentAdversarialDataset(object):
 
     def _make_alphabet_dataset(self):
         """
-        This is a discrete dataset consisting of the letters
-        'a', 'b', and 'c' in order.
-
-        They are represented as one-hot vectors:
-        a = [1,0,0]
-        b = [0,1,0]
-        c = [0,0,1]
+        This is a discrete dataset consisting of the in-order
+        alphabet in length two sequences.
         """
         assert self._opts.sequence_length == 2 
-        assert self._opts.batch_size % 3 == 0
         self.vocab_dim = 3
-        self.label_to_word_dict = {0:'a', 1:'b', 2:'c'}
+        self._opts.num_samples = self.vocab_dim - 1
+        self.label_to_word_dict = {}
 
-        a = 0
-        b = 1
-        c = 2
-        X_train = np.array([[a, b], [b, c], [c, a]])
-        
+        alphabet = []
+        for ch in range(self.vocab_dim):
+            self.label_to_word_dict[ch] = chr(ch + ord('a'))
+            alphabet.append(ch)
+
+        X_train = []
+        for ch1, ch2 in zip(alphabet, alphabet[1:]):
+            X_train.append([ch1, ch2])
+        X_train = np.array(X_train)      
         return X_train
 
     def decode(self, label):

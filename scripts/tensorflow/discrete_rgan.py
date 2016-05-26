@@ -1,11 +1,18 @@
 """
-DOES NOT WORK. IS NOT SUPPOSED TO WORK.
+confirming it works:
+1. go through math and justify
+2. visualize stuff
+    - hidden state
+    - impact of z on outputs
+    - discriminators opinion of different samples
+    - figure out what the loss values should be and what they should tend towards
 
-This is a test model put together to show that a GAN performing 
-discrete sampling of it's output will not learn anything 
-because that sampling procedure is not differentiable. 
-This problem is solved by training the GAN with policy gradient 
-methods as shown in a different file.
+ideas:
+1. use a baseline to reduce variance of sample reward
+2. convert to actor critic by treating the hidden state as the state
+3. backprop reward at each timestep [check]
+4. reduce temperature over time [check]
+5. make separate discriminator? 
 """
 
 import matplotlib.pyplot as plt
@@ -17,9 +24,7 @@ import learning_utils
 
 class RecurrentDiscreteGenerativeAdversarialNetwork(object):
     """
-    GAN implementation for DISCRETE output. This model does 
-    and should not work because the sampling procedure is 
-    not differentiable. 
+     
     """
 
     def __init__(self, options, session, dataset):
@@ -70,7 +75,10 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         self.gen_train_loss_out = self.gen_train_loss(self.gen_scores)
 
         # create the gen train op
-        self.gen_optimize(self.gen_train_loss_out)
+        if self.opts.full_sequence_optimization:
+            self.gen_optimize_full_sequence(self.gen_train_loss_out)
+        else:
+            self.gen_optimize_final_timestep(self.gen_train_loss_out)
 
         # initialize all variable and prep to save model
         tf.initialize_all_variables().run()
@@ -201,11 +209,16 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         # go through inputs forward propagating them 
         # until reaching the last state, which is then 
         # used to make a decision on real vs fake
+        rnn_scores = []
         for idx in range(sequence_length):
             with tf.variable_scope("drnn") as scope:
                 # first pass through, create the lstm  
                 if idx != 0 or reuse:
                     scope.reuse_variables() 
+
+                # create output params
+                dWo = tf.get_variable("dWo", (num_hidden, 1))
+                dbo = tf.get_variable("dbo", (1, ), initializer=tf.zeros)
 
                 # get the input for this timestep
                 next_input = inputs[:, idx, :]
@@ -214,39 +227,43 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 # compute the next hidden state and cell state
                 hidden_state, cell_state = lstm(next_input_drop, cell_state)
 
-        # compute scores based on final hidden state
-        with tf.variable_scope("drnn", reuse=reuse) as scope:            
-            dWo = tf.get_variable("dWo", (num_hidden, 1))
-            dbo = tf.get_variable("dbo", (1, ), initializer=tf.zeros)
-            scores = tf.matmul(hidden_state, dWo) + dbo
+                # compute output score for this timestep
+                scores = tf.matmul(hidden_state, dWo) + dbo
+                rnn_scores.append(tf.expand_dims(scores, 1))
 
         # for now, just return the final layer score
-        return scores
+        rnn_scores = tf.concat(values=rnn_scores, concat_dim=1)
+        return rnn_scores
 
     def gen_train_loss(self, scores):
-        probs = tf.nn.sigmoid(scores)
         # want to _maximize_ the discriminator's probability outputs
         # so _minimize_ the negative of the log of the outputs
-        # loss = tf.reduce_mean(-tf.log(probs))
+        probs = tf.nn.sigmoid(scores)
         loss = -tf.log(probs)
-        loss = tf.squeeze(loss, squeeze_dims=[1])
+        loss = tf.squeeze(loss, squeeze_dims=[2])
         return loss
 
     def dis_train_loss(self, scores):
+        # sigmoid scores to get positive class probabilities
         probs = tf.nn.sigmoid(scores)
+        probs = tf.squeeze(probs, squeeze_dims=[2])
+
         # minimize binary cross entropy 
         ce = -(self.targets_placeholder * tf.log(probs) + 
             (1 - self.targets_placeholder) * tf.log(1 - probs))
         loss = tf.reduce_mean(ce)
         return loss
 
-    def gen_optimize(self, loss):
+    def gen_optimize_final_timestep(self, loss):
 
         # for now, only propagate loss for "action" aka word selection
         # at last timestep. Here, get that index and the resultant gradient shape
         final_timestep = self.opts.sequence_length - 1
         final_probs = self.timestep_probs[:, final_timestep, :]
         grad_shape = final_probs.get_shape()
+
+        # only consider the loss at the final timestep
+        loss = loss[:, final_timestep]
 
         # create an array of indices 
         # where for each row, the first column is just the row number 
@@ -278,6 +295,43 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         opt = tf.train.AdamOptimizer(self.opts.learning_rate)        
         self._train_gen = opt.minimize(pgloss)
 
+    def gen_optimize_full_sequence(self, loss):
+        batch_size = self.opts.batch_size
+        sequence_length = self.opts.sequence_length
+        vocab_dim = self.dataset.vocab_dim
+
+        total_loss = tf.constant(0.)
+        for timestep in range(sequence_length):
+            # get the probabilities for this timestep
+            probs = self.timestep_probs[:, timestep, :]
+            grad_shape = probs.get_shape()
+
+            # create indices into sparse tensor for this timestep
+            # where for each row, the first column is just the row number 
+            # and the second column is the index of the selected word during sampling
+            # basically, this is the numpy arange indexing with a matrix trick
+            word_idxs = tf.expand_dims(self.generated[:, timestep], 1)
+            range_idxs = tf.to_int64(tf.expand_dims(tf.range(batch_size), 1))
+            indices = tf.concat(1, (range_idxs, word_idxs))
+
+            # get the loss for this timestep
+            timestep_grads = loss[:, timestep]
+
+            # create the actual gradients
+            # do so by creating a vector of the rewards aka losses 
+            # inserted at each row in the column of the sampled word
+            # then average over the rows to get the gradients across 
+            # the entire minibatch 
+            grads = tf.SparseTensor(indices, timestep_grads, grad_shape)
+            grads = tf.sparse_tensor_to_dense(grads)
+            grads = tf.mul(grads, probs)
+            timestep_loss = tf.reduce_mean(grads)
+            total_loss += timestep_loss
+
+        # minimize the loss over the full sequence
+        opt = tf.train.AdamOptimizer(self.opts.learning_rate)        
+        self._train_gen = opt.minimize(total_loss)
+
     def dis_optimize(self, loss):
         opt = tf.train.AdamOptimizer(self.opts.learning_rate)
         self._train_dis = opt.minimize(loss)
@@ -306,6 +360,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
             # add generated samples to dataset for training discriminator
             self.dataset.add_generated_samples(generated)
+
             losses.append(loss_out)
 
         return losses
@@ -358,7 +413,8 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         plt.plot(np.array(self.train_dis_losses), c='red', linestyle='solid', 
             label='training dis loss')
         plt.legend()
-        plt.show()
+        plt.savefig('../media/loss.png')
+        plt.close()
 
     def sample_space(self):
         """
@@ -396,15 +452,20 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         batches = steps / (batch_size *  sequence_length)
         space = np.random.uniform(-z_lim, z_lim, size=(batches, batch_size, z_dim))
         samples = []
+        probs = []
         for batch in space:
             feed = {self.z_placeholder: batch, 
                     self.dropout_placeholder: 1,
-                    self.temperature_placeholder: .6}
+                    self.temperature_placeholder: self.opts.sampling_temperature}
             output_values = [self.generated, self.timestep_probs]
             generated_samples, timestep_probs = self.sess.run(output_values, feed_dict=feed)
-            samples += generated_samples.tolist()
 
-        return np.array(samples)
+            self.dataset.add_generated_samples(generated_samples)
+
+            samples += generated_samples.tolist()
+            probs += timestep_probs.tolist()
+
+        return np.array(samples), probs
 
 
 
