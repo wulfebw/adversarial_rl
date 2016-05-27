@@ -415,7 +415,7 @@ class FakeRecurrentAdversarialDataset(object):
         alphabet in length two sequences.
         """
         assert self._opts.sequence_length == 2 
-        self.vocab_dim = 3
+        self.vocab_dim = 10
         assert self._opts.num_samples / self.vocab_dim > 0
         self.label_to_word_dict = {}
 
@@ -427,7 +427,8 @@ class FakeRecurrentAdversarialDataset(object):
         X_train = []
         for ch1, ch2 in zip(alphabet, alphabet[1:] + [alphabet[0]]):
             X_train.append([ch1, ch2])
-        X_train = np.tile(X_train, (self._opts.num_samples / 3, 1))    
+        X_train = np.tile(X_train, (self._opts.num_samples / self.vocab_dim, 1))  
+        X_train = np.random.permutation(X_train)
         return X_train
 
     def decode(self, label):

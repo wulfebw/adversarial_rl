@@ -6,14 +6,20 @@ confirming it works:
     - impact of z on outputs
     - discriminators opinion of different samples
     - figure out what the loss values should be and what they should tend towards
+    - plot of percent of generated samples in true dataset as function of 
+        - number of actions
+        - temperature
 
 ideas:
-1. use a baseline to reduce variance of sample reward
+1. use a baseline to reduce variance of sample reward [next]
 2. convert to actor critic by treating the hidden state as the state
 3. backprop reward at each timestep [check]
 4. reduce temperature over time [check]
-5. make separate discriminator? 
-6. gradient clipping
+5. make separate discriminator? [check]
+6. gradient clipping [check]
+7. why do values go to nan? [check, b/c numerical statbility in both loss and multinomial]
+8. figure out if multinomial matches [check]
+9. simultaneous training with ce loss
 """
 
 import matplotlib.pyplot as plt
@@ -256,9 +262,10 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         probs = tf.squeeze(probs, squeeze_dims=[2])
 
         # minimize binary cross entropy 
-        ce = -(self.targets_placeholder * tf.log(probs) + 
-            (1 - self.targets_placeholder) * tf.log(1 - probs))
-        loss = tf.reduce_mean(ce)
+        # add 1e-6 to second log to prevent it from going to infinity
+        self.ce = -(self.targets_placeholder * tf.log(probs) + 
+            (1 - self.targets_placeholder) * tf.log(1 - probs + 1e-6))
+        loss = tf.reduce_mean(self.ce)
         return loss
 
     def gen_optimize_final_timestep(self, loss):
@@ -339,15 +346,34 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
             total_loss += timestep_loss
 
         # minimize the loss over the full sequence
-        opt = tf.train.AdamOptimizer(self.opts.learning_rate)   
+        global_step = tf.Variable(0, trainable=False)
+        init_learning_rate = self.opts.learning_rate
+        decay_every = self.opts.decay_every 
+        decay_ratio = self.opts.decay_ratio
+        learning_rate = tf.train.exponential_decay(init_learning_rate, global_step,
+                                decay_every, decay_ratio, staircase=True)
+        opt = tf.train.AdamOptimizer(learning_rate)   
         # optimize only generative params o/w will also move the 
         # discriminator's params, which actually works, but 
-        # is just incorrect            
-        self._train_gen = opt.minimize(total_loss, var_list=self.g_params)
+        # is just incorrect      
+        grads_params = opt.compute_gradients(total_loss, self.g_params) 
+        max_norm = self.opts.max_norm
+        clipped_grads_params = [(tf.clip_by_norm(g, max_norm), p) for g, p in grads_params]
+        self._train_gen = opt.apply_gradients(clipped_grads_params, global_step=global_step)
 
     def dis_optimize(self, loss):
-        opt = tf.train.AdamOptimizer(self.opts.learning_rate)
-        self._train_dis = opt.minimize(loss, var_list=self.d_params)
+        global_step = tf.Variable(0, trainable=False)
+        init_learning_rate = self.opts.learning_rate
+        decay_every = self.opts.decay_every 
+        decay_ratio = self.opts.decay_ratio
+        learning_rate = tf.train.exponential_decay(init_learning_rate, global_step,
+                                decay_every, decay_ratio, staircase=True)
+        opt = tf.train.AdamOptimizer(learning_rate)
+        grads_params = opt.compute_gradients(loss, self.d_params)
+        max_norm = self.opts.max_norm
+        clipped_grads_params = [(tf.clip_by_norm(g, max_norm), p) 
+                                        for g, p in grads_params]
+        self._train_dis = opt.apply_gradients(clipped_grads_params)                     
 
     def get_z(self):
         # pass in z noise only once at the beginning
@@ -358,30 +384,37 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
     def train_generator(self):
         losses = []
         num_batches = self.opts.num_samples / self.opts.batch_size
-        for bidx in range(num_batches):
-            
-            # build the dict to feed inputs to graph
-            feed = {}
-            z = self.get_z()
-            feed[self.z_placeholder] = z
-            feed[self.dropout_placeholder] = self.opts.dropout
-            feed[self.temperature_placeholder] = self.opts.temperature
 
-            # perform the actual training step if training
-            output_values = [self._train_gen, self.gen_train_loss_out, self.generated]
-            _, loss_out, generated = self.sess.run(output_values, feed_dict=feed)
+        for gepoch in range(self.opts.epoch_multiple_gen):
+            for bidx in range(num_batches):
+                
+                # build the dict to feed inputs to graph
+                feed = {}
+                z = self.get_z()
+                feed[self.z_placeholder] = z
+                feed[self.dropout_placeholder] = self.opts.dropout
+                feed[self.temperature_placeholder] = self.opts.temperature
 
-            # add generated samples to dataset for training discriminator
-            self.dataset.add_generated_samples(generated)
+                # perform the actual training step if training
+                output_values = [self._train_gen, self.gen_train_loss_out, 
+                                self.generated, self.timestep_probs]
+                _, loss_out, generated, probs = self.sess.run(output_values, feed_dict=feed)
 
-            losses.append(loss_out)
+                if any(np.isnan(probs.flatten())):
+                    print generated
+                    print z
+
+                # add generated samples to dataset for training discriminator
+                self.dataset.add_generated_samples(generated)
+
+                losses.append(loss_out)
 
         return losses
 
     def train_discriminator(self):
         losses = []
 
-        for depoch in range(self.opts.train_ratio):
+        for depoch in range(self.opts.epoch_multiple_dis):
             for inputs, targets, in self.dataset.next_batch():
 
                 # build the dict to feed inputs to graph
@@ -391,8 +424,16 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 feed[self.dropout_placeholder] = self.opts.dropout
 
                 # perform the actual training step if training
-                output_values = [self._train_dis, self.dis_train_loss_out]
-                _, loss_out = self.sess.run(output_values, feed_dict=feed)
+                output_values = [self._train_dis, self.dis_train_loss_out, self.ce]
+                _, loss_out, ce = self.sess.run(output_values, feed_dict=feed)
+
+                if np.isnan(loss_out):
+                    print inputs
+                    print targets
+                    for t in self.dataset.data['generated_samples']:
+                        print t
+                    print ce
+                    raw_input()
 
                 losses.append(loss_out)
 

@@ -15,17 +15,19 @@ def batch_sample_with_temperature(arr, temperature=1.0):
     batch_size, vocab_size = arr.get_shape()
 
     with tf.op_scope([arr, temperature], "batch_sample_with_temperature"):
+
+
         # subtract by the largest value in each batch to improve stability
         c = tf.reduce_max(arr, reduction_indices=1, keep_dims=True)
+        softmax = tf.nn.softmax(arr - c) + 1e-6
+        x = tf.log(softmax) # / temperature
 
-        # exponentiate and normalize by sum to get probabilities
-        exp_arr = tf.exp(tf.div(arr - c, temperature))
-        exp_arr_sum = tf.reduce_sum(exp_arr, reduction_indices=1, keep_dims=True)
-        x = tf.div(exp_arr, exp_arr_sum) 
+        # softmax again
+        x = tf.nn.softmax(x) / temperature
 
         # perform the sampling
-        u = tf.random_uniform(tf.shape(arr), minval=0, maxval=1)
-        sampled_idx = tf.argmax(tf.sub(x, u), dimension=1) 
+        u = tf.random_uniform(tf.shape(arr), minval=1e-6, maxval=1)
+        sampled_idx = tf.argmax(tf.sub(x, -tf.log(-tf.log(u))), dimension=1) 
         
     return sampled_idx, x
 
