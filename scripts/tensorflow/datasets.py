@@ -1,8 +1,90 @@
 
+import collections
+import csv
+import itertools
 import math
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+
+DATASET = "title"
+TITLE_FILEPATH = '/Users/wulfebw/Dropbox/School/Stanford/spring_2016/cs224d/project/data/game_summarization/{}_words.csv'.format(DATASET)
+
+def mlb_iterator(raw_data, batch_size, num_steps):
+  raw_data = np.array(raw_data, dtype=np.int32)
+  data_len = len(raw_data)
+  batch_len = data_len // batch_size
+  data = np.zeros([batch_size, batch_len], dtype=np.int32)
+  for i in range(batch_size):
+    data[i] = raw_data[batch_len * i:batch_len * (i + 1)]
+  epoch_size = (batch_len - 1) // num_steps
+  if epoch_size == 0:
+    raise ValueError("epoch_size == 0, decrease batch_size or num_steps")
+  for i in range(epoch_size):
+    x = data[:, i * num_steps:(i + 1) * num_steps]
+    y = data[:, i * num_steps + 1:(i + 1) * num_steps + 1]
+    yield (x, y)
+
+def get_mlb_dataset(limit=-1):
+    input_filepath = TITLE_FILEPATH
+    count = 0
+    word_count = 0
+    with open(input_filepath, 'rb') as infile:
+        csvreader = csv.reader(infile, delimiter=' ')
+        for row in csvreader:
+            count += 1
+            for word in row:
+                yield word
+            yield '<eos>'
+
+            if limit > 0 and count > limit:
+                raise StopIteration
+
+class Vocab(object):
+  def __init__(self):
+    self.word_to_index = {}
+    self.index_to_word = {}
+    self.word_counts = collections.defaultdict(int)
+    self.word_freq = collections.defaultdict(int)
+    self.total_words = 0
+    self.unknown = '<unk>'
+    self.add_word(self.unknown, count=0)
+
+  def add_word(self, word, threshold=0, count=1):
+    if self.word_counts[word] < threshold:
+      return
+
+    if word not in self.word_to_index:
+      index = len(self.word_to_index)
+      self.word_to_index[word] = index
+      self.index_to_word[index] = word
+    self.word_freq[word] += count
+
+  def construct(self, words):
+    for word in words:
+      self.add_word(word)
+    self.total_words = float(sum(self.word_freq.values()))
+    print '{} total words with {} uniques'.format(self.total_words, len(self.word_freq))
+  
+  def limited_construct(self, words):
+    count_words, words = itertools.tee(words)
+    for word in count_words:
+      self.word_counts[word] += 1
+    for word in words:
+      self.add_word(word, threshold=2)
+    self.total_words = float(sum(self.word_freq.values()))
+    print '{} total words with {} uniques'.format(self.total_words, len(self.word_freq))
+
+  def encode(self, word):
+    if word not in self.word_to_index:
+      word = self.unknown
+    return self.word_to_index[word]
+
+  def decode(self, index):
+    return self.index_to_word[index]
+
+  def __len__(self):
+    return len(self.word_freq)
 
 class FakeSeqToSeqDataSet(object):
 
@@ -361,18 +443,12 @@ class FakeRecurrentAdversarialDataset(object):
             X_train = self._make_circle_dataset()
         elif self._opts.dataset_name == 'alphabet':
             X_train = self._make_alphabet_dataset()
+        elif self._opts.dataset_name == 'mlb':
+            X_train = self._make_mlb_dataset()
         else:
             raise ValueError("invalid dataset name: {}".format(self._opts.dataset_name))
         data['X_train'] = X_train
         self.data = data
-
-        # use the mean and std of the real data 
-        # to compute an additional loss. These values 
-        # can either be accumulated over time 
-        # or can be solved for once at the beginning
-        # of training if using a fixed dataset like this one
-        self.real_means = np.mean(X_train, (0, 1))
-        self.real_stds = np.std(X_train, (0, 1))
 
     def _make_sine_dataset(self):
         """
@@ -413,9 +489,33 @@ class FakeRecurrentAdversarialDataset(object):
         """
         This is a discrete dataset consisting of the in-order
         alphabet in length two sequences.
+
+        The following settings get 99% in sample for the full alphabet:
+        opts = TestOptions()    
+        opts.learning_rate = .01
+        opts.epoch_multiple_gen = 1
+        opts.epoch_multiple_dis = 5
+        opts.batch_size = 52
+        opts.num_samples = 130
+        opts.epochs_to_train = 1000
+        opts.num_hidden = 128
+        opts.embed_dim = 32
+        opts.z_dim = 2
+        opts.dropout = 1.
+        opts.temperature = 1.
+        opts.sampling_temperature = .1
+        opts.full_sequence_optimization = True
+        opts.save_every = 200
+        opts.plot_every = 50
+        opts.reduce_temperature_every = 20
+        opts.temperature_reduction_amount = .01
+        opts.min_temperature = .1
+        opts.decay_every = 25
+        opts.decay_ratio = .96
+        opts.max_norm = 5.0
         """
         assert self._opts.sequence_length == 2 
-        self.vocab_dim = 10
+        self.vocab_dim = 26
         assert self._opts.num_samples / self.vocab_dim > 0
         self.label_to_word_dict = {}
 
@@ -439,13 +539,59 @@ class FakeRecurrentAdversarialDataset(object):
             raise(ValueError("invalid label: {}".format(label)))
         return self.label_to_word_dict[label]
 
-    def decode_dataset(self, dataset):
+    def decode_dataset(self, dataset, real=False):
         """
         Decode the entire fake dataset generated by the model  
         """
-        return [[self.decode(label) for label in seq] for seq in dataset]
+        decoder = self.decode
+        if real:
+            decoder = self.vocab.decode
+
+        return [[decoder(label) for label in seq] for seq in dataset]
+
+    def fake_mlb_generator(self):
+        words = """craig kimbrel downs d-backs , sets braves saves mark 
+                russell martin punctuates 8-run sixth as pirates stomp brewers 
+                roark fans 11 , holds padres to 3 hits in 6-0 win 
+                gordon 's 2 triples lead dodgers past rockies 7-2 
+                buster posey homers in 8th as giants edge mets , win 8th in 10 games 
+                d-rays stop clemens , yankees on kazmir 's gem 
+                carlos santana 's 3-run homer helps indians rally in win over rays 
+                cleveland 10 , kansas city 5 ( 1st game ) 
+                jones matches career-best five hits 
+                hamels denied first mlb win by brewers 
+                wang loses perfect game in 8th ; yankees win 
+                yanks avoid sweep when o 's walk four in 9th 
+                rookie gross hits grand slam in rout of a 's 
+                lamb 's 4 rbi move astros within 1.5 of cubs 
+                sexson provides game-winning hit"""
+        words = words.strip().split()
+        for w in words:
+            yield w
+
+    def _make_mlb_dataset(self):
+        sequence_length = self._opts.sequence_length
+        num_samples = self._opts.num_samples
+        limit = self._opts.sentence_limit
+
+        self.vocab = Vocab()
+        # self.vocab.construct(get_mlb_dataset(limit))
+        self.vocab.construct(self.fake_mlb_generator())
+        self.vocab_dim = len(self.vocab.word_to_index)
+        # encoded_train = np.array([self.vocab.encode(word) 
+        #                     for word in get_mlb_dataset(limit)], dtype=np.int32)
+        encoded_train = np.array([self.vocab.encode(word) 
+                            for word in self.fake_mlb_generator()], dtype=np.int32)
 
 
+        remove = len(encoded_train) % sequence_length
+        if remove > 0:
+            encoded_train = encoded_train[:-remove]
+        print encoded_train
+        X_train = encoded_train.reshape(-1, sequence_length)
+        print self.decode_dataset(X_train, real=True)
+        print self.vocab.word_to_index
+        return X_train
 
 
 
