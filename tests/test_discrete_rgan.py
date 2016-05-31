@@ -31,10 +31,12 @@ class TestOptions(object):
         self.z_lim = 1
         self.dataset_name = 'alphabet'
         self.discrete = True
-        self.num_samples = 10
+        self.num_samples = 100
         self.max_norm = 2.0
         self.decay_every = 10000
         self.decay_ratio = .96
+        self.epoch_multiple_gen = 1
+        self.epoch_multiple_dis = 1
 
 class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
@@ -98,12 +100,12 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts = TestOptions()    
         opts.learning_rate = .01
         opts.epoch_multiple_gen = 1
-        opts.epoch_multiple_dis = 5
+        opts.epoch_multiple_dis = 1
         opts.batch_size = 52
         opts.num_samples = 130
         opts.epochs_to_train = 1000
-        opts.num_hidden = 128
-        opts.embed_dim = 32
+        opts.num_hidden = 64
+        opts.embed_dim = 26
         opts.z_dim = 2
         opts.dropout = 1.
         opts.temperature = 1.
@@ -116,7 +118,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts.min_temperature = .1
         opts.decay_every = 25
         opts.decay_ratio = .96
-        opts.max_norm = 5.0
+        opts.max_norm = 1.0
 
         with tf.Session() as session:
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
@@ -126,8 +128,6 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
             # get the param values beforehand
             params = tf.trainable_variables()
-            # param_info = sorted([(p.name, p.eval()) for p in params 
-            #                     if 'grnn' in p.name])
             param_info = sorted([(p.name, p.eval()) for p in params])
 
             # train
@@ -184,8 +184,6 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             # at all because they cannot possibly change because they are blocked
             # from any gradient by a nondifferentiable, discrete sampling operation
             params_after = tf.trainable_variables()
-            # param_after_info = sorted([(p.name, p.eval()) for p in params_after 
-            #                             if 'grnn' in p.name])
             param_after_info = sorted([(p.name, p.eval()) for p in params_after])
             total_diff = 0
             total_num_params = 0
@@ -193,8 +191,6 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
                 print "\n"
                 print n
                 print n_after
-                # print vals.flatten().tolist()
-                # print vals_after.flatten().tolist()
                 num_params = len(vals_after.flatten().tolist())
                 total_num_params += num_params
                 diffs = vals - vals_after
@@ -211,19 +207,19 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts = TestOptions()    
         opts.learning_rate = .01
         opts.epoch_multiple_gen = 1
-        opts.epoch_multiple_dis = 2
-        opts.batch_size = 16
+        opts.epoch_multiple_dis = 10
+        opts.batch_size = 32
         opts.sequence_length = 2
-        opts.num_samples = 64
-        opts.epochs_to_train = 1000
+        opts.num_samples = 512
+        opts.epochs_to_train = 500
         opts.num_hidden = 128
-        opts.embed_dim = 32
-        opts.z_dim = 4
+        opts.embed_dim = 40
+        opts.z_dim = 10
         opts.dropout = 1.
-        opts.temperature = .2
+        opts.temperature = 1.
         opts.sampling_temperature = .1
         opts.full_sequence_optimization = True
-        opts.save_every = 200
+        opts.save_every = 50
         opts.plot_every = 50
         opts.reduce_temperature_every = 10
         opts.temperature_reduction_amount = .01
@@ -238,7 +234,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
             model = discrete_rgan.RecurrentDiscreteGenerativeAdversarialNetwork(opts, session, dataset)
             saver = tf.train.Saver()
-            #saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
+            saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
 
             # get the param values beforehand
             params = tf.trainable_variables()
@@ -246,7 +242,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
             # train
             losses = []
-            TRAIN = True
+            TRAIN = False
             if TRAIN == True:
                 for epoch in range(opts.epochs_to_train):
                     model.run_epoch()  

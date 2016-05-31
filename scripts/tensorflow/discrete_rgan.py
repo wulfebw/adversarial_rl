@@ -48,6 +48,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         self.train_gen_losses = []
         self.train_dis_losses = []
         self.perplexities = []
+        self.baseline_losses = []
 
     def build_placeholders(self):
         # unpack values for easier reference
@@ -73,20 +74,25 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
     def build_gen_graph(self):
         # forward pass through generator
         # returns a (batch_size, sequence_length, input_dim) for generated
-        self.generated, self.timestep_probs = self.generate_lstm()
+        self.generated, self.timestep_probs, self.predicted_rewards = self.generate()
 
         # get the predictions from the discriminator
         # returns a (batch_size, 1) output
         self.gen_scores = self.discriminate(self.generated, reuse=False)
 
-        # formulate the loss
-        self.gen_train_loss_out = self.gen_train_loss(self.gen_scores)
+        # formulate the policy gradient loss
+        self.gen_train_loss_out, self.baseline_loss = self.gen_train_loss(self.gen_scores,
+             self.predicted_rewards)
 
-        # get generative parameters
-        self.g_params = [p for p in tf.trainable_variables() if 'g' in p.name]
+        # get generative parameters and baseline params
+        self.g_params = [p for p in tf.trainable_variables() if 'g' in p.name and 'b' not in p.name]
+        self.b_params = [p for p in tf.trainable_variables() if 'b' in p.name]
 
         # create the gen train op
         self.gen_optimize_rewards(self.gen_train_loss_out)
+
+        # create the baseline train op
+        self.optimize_baseline(self.baseline_loss)
 
         # initialize all variable and prep to save model
         tf.initialize_all_variables().run()
@@ -108,7 +114,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         # initialize all variable and prep to save model
         tf.initialize_all_variables().run()
 
-    def generate_lstm(self):
+    def generate(self):
         """
         Starting with randomly sampled z, generate outputs in a 
         continuous domain.
@@ -141,6 +147,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         # and collecting outputs in rnn_outputs
         rnn_outputs = []
         timestep_probs = []
+        timestep_predicted_rewards = []
         for idx in range(sequence_length):
             with tf.variable_scope("grnn") as scope:
                 if idx != 0:
@@ -152,6 +159,8 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 gWo = tf.get_variable("gWo", (num_hidden, vocab_dim))
                 gbo = tf.get_variable("gbo", (vocab_dim, ), initializer=tf.zeros)
 
+
+
                 # retrive the word embedding and remove sequence dimension
                 next_input = tf.nn.embedding_lookup(L, word_labels)
                 next_input = tf.squeeze(next_input, squeeze_dims=[1])
@@ -159,6 +168,12 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
                 # compute the next hidden state and cell state
                 hidden_state, cell_state = lstm(next_input_drop, cell_state)
+
+                # predict the rewards resultant from this hidden state
+                # block gradient from propagating into hidden state
+                gWb = tf.get_variable("gWb", (num_hidden, 1))
+                gbb = tf.get_variable("gbb", (1, ), initializer=tf.zeros)
+                predicted_rewards = tf.matmul(tf.stop_gradient(hidden_state), gWb) + gbb
 
                 # project hidden state to size of vocabulary
                 # no nonlinearity here because this will be feed into a softmax
@@ -177,13 +192,15 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 # the probabilities that generated those labels
                 rnn_outputs.append(word_labels)
                 timestep_probs.append(probs)
+                timestep_predicted_rewards.append(predicted_rewards)
 
         # return the word labels as shape (batch_size, sequence_length)
         # return the probs at each timestep as shape 
         # (batch_size, sequence_length, vocab_dim)
         rnn_outputs = tf.concat(values=rnn_outputs, concat_dim=1)
         timestep_probs = tf.concat(values=timestep_probs, concat_dim=1)
-        return rnn_outputs, timestep_probs
+        timestep_predicted_rewards = tf.concat(values=timestep_predicted_rewards, concat_dim=1)
+        return rnn_outputs, timestep_probs, timestep_predicted_rewards
 
     def discriminate(self, labels, reuse):
         """
@@ -246,12 +263,16 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         rnn_scores = tf.concat(values=rnn_scores, concat_dim=1)
         return rnn_scores
 
-    def gen_train_loss(self, scores):
+    def gen_train_loss(self, scores, predicted_rewards):
         # want to _maximize_ the discriminator's probability outputs
         # so _minimize_ the negative of the log of the outputs
         probs = tf.nn.sigmoid(scores)
         rewards = -tf.log(probs)
         rewards = tf.squeeze(rewards, squeeze_dims=[2])
+
+        # subtract baseline
+        baseline_subtracted_rewards = rewards - predicted_rewards
+        baseline_loss = tf.reduce_mean(baseline_subtracted_rewards ** 2)
 
         # policy gradient loss is, for each reward, that reward
         # times the probability of the action that resulted in that reward
@@ -282,18 +303,21 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                                     reduction_indices=1)
 
             # get the rewards for this timestep
-            timestep_rewards = rewards[:, timestep]
+            #timestep_rewards = rewards[:, timestep]
+            timestep_rewards = baseline_subtracted_rewards[:, timestep]
             
             # compute loss this timestep
             timestep_loss = tf.mul(timestep_rewards, choosen_word_probs)
             total_loss += timestep_loss
 
-        return total_loss
+        return total_loss, baseline_loss
 
     def dis_train_loss(self, scores):
         # sigmoid scores to get positive class probabilities
         probs = tf.nn.sigmoid(scores)
         probs = tf.squeeze(probs, squeeze_dims=[2])
+
+        self.dis_probs = probs
 
         # minimize binary cross entropy 
         # add 1e-6 to second log to prevent it from going to infinity
@@ -332,7 +356,24 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         max_norm = self.opts.max_norm
         clipped_grads_params = [(tf.clip_by_norm(g, max_norm), p) 
                                         for g, p in grads_params]
-        self._train_dis = opt.apply_gradients(clipped_grads_params)                     
+
+        self.clipped_grads_params = clipped_grads_params
+
+        self._train_dis = opt.apply_gradients(clipped_grads_params) 
+
+    def optimize_baseline(self, loss):
+        global_step = tf.Variable(0, trainable=False)
+        init_learning_rate = self.opts.learning_rate
+        decay_every = self.opts.decay_every 
+        decay_ratio = self.opts.decay_ratio
+        learning_rate = tf.train.exponential_decay(init_learning_rate, global_step,
+                                decay_every, decay_ratio, staircase=True)
+        opt = tf.train.AdamOptimizer(learning_rate)
+        grads_params = opt.compute_gradients(loss, self.b_params)
+        self._train_baseline = opt.apply_gradients(grads_params) 
+
+        opt = tf.train.AdamOptimizer(self.opts.learning_rate)    
+        self._train_baseline = opt.minimize(loss)   
 
     def get_z(self):
         # pass in z noise only once at the beginning
@@ -343,6 +384,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
     def train_generator(self):
         losses = []
         batch_probs = []
+        baseline_losses = []
         num_batches = self.opts.num_samples / self.opts.batch_size
 
         for gepoch in range(self.opts.epoch_multiple_gen):
@@ -357,8 +399,10 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
                 # perform the actual training step if training
                 output_values = [self._train_gen, self.gen_train_loss_out, 
-                                self.generated, self.timestep_probs]
-                _, loss_out, generated, probs = self.sess.run(output_values, feed_dict=feed)
+                                self.generated, self.timestep_probs, self._train_baseline, 
+                                self.baseline_loss]
+                _, loss_out, generated, probs, _, b_loss = self.sess.run(output_values, 
+                    feed_dict=feed)
 
                 if any(np.isnan(probs.flatten())):
                     print generated
@@ -369,8 +413,9 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
                 losses.append(loss_out)
                 batch_probs.append(probs)
+                baseline_losses.append(b_loss)
 
-        return losses, batch_probs
+        return losses, batch_probs, baseline_losses
 
     def train_discriminator(self):
         losses = []
@@ -385,8 +430,17 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 feed[self.dropout_placeholder] = self.opts.dropout
 
                 # perform the actual training step if training
-                output_values = [self._train_dis, self.dis_train_loss_out, self.ce]
-                _, loss_out, ce = self.sess.run(output_values, feed_dict=feed)
+                output_values = [self._train_dis, self.dis_train_loss_out, self.ce, self.clipped_grads_params[0][0], self.clipped_grads_params[0][1], self.dis_probs]
+                _, loss_out, ce, gs, ps, dprobs = self.sess.run(output_values, feed_dict=feed)
+
+                # print inputs
+                # print targets
+                # print dprobs
+                # print ce
+                # print ps
+                # print gs
+                # print loss_out
+                # raw_input()
 
                 if np.isnan(loss_out):
                     print inputs
@@ -406,22 +460,25 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         # for now, track losses manually
         gen_losses = []
         dis_losses = []
+        baseline_losses = []
 
-        gen_losses_out, batch_probs = self.train_generator()
+        gen_losses_out, batch_probs, baseline_loss = self.train_generator()
         dis_losses_out = self.train_discriminator()
 
         gen_losses.append(gen_losses_out)
         dis_losses.append(dis_losses_out)
+        baseline_losses.append(baseline_loss)
 
         mean_gen_loss = np.mean(gen_losses_out)
         mean_dis_loss = np.mean(dis_losses_out)
-        perplexity = learning_utils.calculate_perplexity(batch_probs)
+        perplexity = learning_utils.calculate_perplexity(np.array(batch_probs)[:, 1:, :])
 
         print('train epoch: {}\tgen loss: {}\tdis loss: {}\tperplexity: {}'.format(
             self.epoch, mean_gen_loss, mean_dis_loss, perplexity))
 
         self.train_gen_losses.append(mean_gen_loss)
         self.train_dis_losses.append(mean_dis_loss)
+        self.baseline_losses.append(np.mean(baseline_losses))
         self.perplexities.append(perplexity)
 
     def plot_results(self):
@@ -439,6 +496,11 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         plt.plot(self.perplexities, c='green', label='perplexity')
         plt.legend()
         plt.savefig('../media/perplexity.png')
+        plt.close()
+
+        plt.plot(self.baseline_losses, c='teal', label='baseline loss')
+        plt.legend()
+        plt.savefig('../media/baseline_loss.png')
         plt.close()
 
     def sample_space(self):

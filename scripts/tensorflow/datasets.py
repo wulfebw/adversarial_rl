@@ -364,6 +364,7 @@ class FakeRecurrentAdversarialDataset(object):
         # go through all the batches collecting real and 
         # fake data and yielding it
         for bidx in range(num_batches):
+
             # effective batch size is real batch_size / 2
             effective_batch_size = self._opts.batch_size / 2
             # start and end indices
@@ -551,7 +552,7 @@ class FakeRecurrentAdversarialDataset(object):
 
     def fake_mlb_generator(self):
         words = """craig kimbrel downs d-backs , sets braves saves mark 
-                russell martin punctuates 8-run sixth as pirates stomp brewers 
+                russell martin punctuates 8-run sixth as pirates stomp brewers
                 roark fans 11 , holds padres to 3 hits in 6-0 win 
                 gordon 's 2 triples lead dodgers past rockies 7-2 
                 buster posey homers in 8th as giants edge mets , win 8th in 10 games 
@@ -570,6 +571,34 @@ class FakeRecurrentAdversarialDataset(object):
             yield w
 
     def _make_mlb_dataset(self):
+        """
+        seems to work:
+        opts = TestOptions()    
+        opts.learning_rate = .01
+        opts.epoch_multiple_gen = 1
+        opts.epoch_multiple_dis = 10
+        opts.batch_size = 32
+        opts.sequence_length = 2
+        opts.num_samples = 512
+        opts.epochs_to_train = 500
+        opts.num_hidden = 128
+        opts.embed_dim = 40
+        opts.z_dim = 10
+        opts.dropout = 1.
+        opts.temperature = 1.
+        opts.sampling_temperature = .1
+        opts.full_sequence_optimization = True
+        opts.save_every = 50
+        opts.plot_every = 50
+        opts.reduce_temperature_every = 10
+        opts.temperature_reduction_amount = .01
+        opts.min_temperature = .1
+        opts.decay_every = 20
+        opts.decay_ratio = .96
+        opts.max_norm = 2.0
+        opts.sentence_limit = 1
+        opts.dataset_name = 'mlb'
+        """
         sequence_length = self._opts.sequence_length
         num_samples = self._opts.num_samples
         limit = self._opts.sentence_limit
