@@ -86,10 +86,6 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         self.g_params = [p for p in tf.trainable_variables() if 'g' in p.name]
 
         # create the gen train op
-        # if self.opts.full_sequence_optimization:
-        #     self.gen_optimize_full_sequence(self.gen_train_loss_out)
-        # else:
-        #     self.gen_optimize_final_timestep(self.gen_train_loss_out)
         self.gen_optimize_rewards(self.gen_train_loss_out)
 
         # initialize all variable and prep to save model
@@ -254,67 +250,14 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         # want to _maximize_ the discriminator's probability outputs
         # so _minimize_ the negative of the log of the outputs
         probs = tf.nn.sigmoid(scores)
-        loss = -tf.log(probs)
-        loss = tf.squeeze(loss, squeeze_dims=[2])
-        return loss
+        rewards = -tf.log(probs)
+        rewards = tf.squeeze(rewards, squeeze_dims=[2])
 
-    def dis_train_loss(self, scores):
-        # sigmoid scores to get positive class probabilities
-        probs = tf.nn.sigmoid(scores)
-        probs = tf.squeeze(probs, squeeze_dims=[2])
+        # policy gradient loss is, for each reward, that reward
+        # times the probability of the action that resulted in that reward
 
-        # minimize binary cross entropy 
-        # add 1e-6 to second log to prevent it from going to infinity
-        self.ce = -(self.targets_placeholder * tf.log(probs) + 
-            (1 - self.targets_placeholder) * tf.log(1 - probs + 1e-6))
-        loss = tf.reduce_mean(self.ce)
-        return loss
-
-    def gen_optimize_final_timestep(self, loss):
-
-        # for now, only propagate loss for "action" aka word selection
-        # at last timestep. Here, get that index and the resultant gradient shape
-        final_timestep = self.opts.sequence_length - 1
-        final_probs = self.timestep_probs[:, final_timestep, :]
-        grad_shape = final_probs.get_shape()
-
-        # only consider the loss at the final timestep
-        loss = loss[:, final_timestep]
-
-        # create an array of indices 
-        # where for each row, the first column is just the row number 
-        # and the second column is the index of the selected word during sampling
-        # basically, this is the numpy arange indexing with a matrix trick
-        word_idxs = tf.expand_dims(self.generated[:, final_timestep], 1)
-        range_idxs = tf.to_int64(tf.expand_dims(tf.range(self.opts.batch_size), 1))
-        indices = tf.concat(1, (range_idxs, word_idxs))
-
-        # create the actual gradients
-        # do so by creating a vector of the rewards aka losses 
-        # inserted at each row in the column of the sampled word
-        # then average over the rows to get the gradients across 
-        # the entire minibatch 
-        grads = tf.SparseTensor(indices, loss, grad_shape)
-        grads = tf.sparse_tensor_to_dense(grads)
-        grads = tf.mul(grads, final_probs)
-
-        # option 1: get and apply the gradients manually
-        # grads = tf.reduce_mean(grads, 0)
-        # params = tf.trainable_variables()
-        # params = [p for p in params if 'grnn' in p.name]
-        # gradients = tf.gradients(grads, params)
-        # print gradients
-        # raw_input()
-
-        # option 2: treat the mean of grads as the loss and minimize it
-        pgloss = tf.reduce_mean(grads)
-        opt = tf.train.AdamOptimizer(self.opts.learning_rate) 
-        # optimize only generative params o/w will also move the 
-        # discriminator's params, which actually works, but 
-        # is just incorrect       
-        self._train_gen = opt.minimize(pgloss, var_list=self.g_params)
-
-    def gen_optimize_rewards(self, rewards):
+        # not sure how to incorporate a baseline, might be able to just do it here
+        # by subtracting from the reward value
         batch_size = self.opts.batch_size
         sequence_length = self.opts.sequence_length
         vocab_dim = self.dataset.vocab_dim
@@ -345,6 +288,21 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
             timestep_loss = tf.mul(timestep_rewards, choosen_word_probs)
             total_loss += timestep_loss
 
+        return total_loss
+
+    def dis_train_loss(self, scores):
+        # sigmoid scores to get positive class probabilities
+        probs = tf.nn.sigmoid(scores)
+        probs = tf.squeeze(probs, squeeze_dims=[2])
+
+        # minimize binary cross entropy 
+        # add 1e-6 to second log to prevent it from going to infinity
+        self.ce = -(self.targets_placeholder * tf.log(probs) + 
+            (1 - self.targets_placeholder) * tf.log(1 - probs + 1e-6))
+        loss = tf.reduce_mean(self.ce)
+        return loss
+
+    def gen_optimize_rewards(self, loss):
 
         # minimize the loss over the full sequence
         global_step = tf.Variable(0, trainable=False)
@@ -357,56 +315,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         # optimize only generative params o/w will also move the 
         # discriminator's params, which actually works, but 
         # is just incorrect      
-        grads_params = opt.compute_gradients(total_loss, self.g_params) 
-        max_norm = self.opts.max_norm
-        clipped_grads_params = [(tf.clip_by_norm(g, max_norm), p) for g, p in grads_params]
-        self._train_gen = opt.apply_gradients(clipped_grads_params, global_step=global_step)
-
-    def gen_optimize_full_sequence(self, loss):
-        batch_size = self.opts.batch_size
-        sequence_length = self.opts.sequence_length
-        vocab_dim = self.dataset.vocab_dim
-
-        total_loss = tf.constant(0.)
-        for timestep in range(sequence_length):
-            # get the probabilities for this timestep
-            probs = self.timestep_probs[:, timestep, :]
-            grad_shape = probs.get_shape()
-
-            # create indices into sparse tensor for this timestep
-            # where for each row, the first column is just the row number 
-            # and the second column is the index of the selected word during sampling
-            # basically, this is the numpy arange indexing with a matrix trick
-            word_idxs = tf.expand_dims(self.generated[:, timestep], 1)
-            range_idxs = tf.to_int64(tf.expand_dims(tf.range(batch_size), 1))
-            indices = tf.concat(1, (range_idxs, word_idxs))
-
-            # get the loss for this timestep
-            timestep_grads = loss[:, timestep]
-
-            # create the actual gradients
-            # do so by creating a vector of the rewards aka losses 
-            # inserted at each row in the column of the sampled word
-            # then average over the rows to get the gradients across 
-            # the entire minibatch 
-            grads = tf.SparseTensor(indices, timestep_grads, grad_shape)
-            grads = tf.sparse_tensor_to_dense(grads)
-            grads = tf.mul(grads, probs)
-            timestep_loss = tf.reduce_mean(grads)
-            total_loss += timestep_loss
-
-        # minimize the loss over the full sequence
-        global_step = tf.Variable(0, trainable=False)
-        init_learning_rate = self.opts.learning_rate
-        decay_every = self.opts.decay_every 
-        decay_ratio = self.opts.decay_ratio
-        learning_rate = tf.train.exponential_decay(init_learning_rate, global_step,
-                                decay_every, decay_ratio, staircase=True)
-        opt = tf.train.AdamOptimizer(learning_rate)   
-        # optimize only generative params o/w will also move the 
-        # discriminator's params, which actually works, but 
-        # is just incorrect      
-        grads_params = opt.compute_gradients(total_loss, self.g_params) 
+        grads_params = opt.compute_gradients(loss, self.g_params) 
         max_norm = self.opts.max_norm
         clipped_grads_params = [(tf.clip_by_norm(g, max_norm), p) for g, p in grads_params]
         self._train_gen = opt.apply_gradients(clipped_grads_params, global_step=global_step)
