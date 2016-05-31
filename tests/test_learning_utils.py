@@ -43,7 +43,7 @@ class TestLearningUtils(unittest.TestCase):
 
         sess = tf.InteractiveSession()
         arr = tf.to_float(tf.convert_to_tensor(softmax))
-        tf_indices, _ = sess.run(learning_utils.batch_sample_with_temperature(arr, temperature = 1.))
+        tf_indices, _ = sess.run(learning_utils.batch_sample_with_temperature(arr, temperature = .2))
         tf_counts = collections.Counter()
         tf_counts.update(tf_indices)
 
@@ -55,6 +55,10 @@ class TestLearningUtils(unittest.TestCase):
             plt.scatter(x, np_counts[x], c='blue')
             plt.scatter(x, tf_counts[x], c='red')
         plt.show()
+
+    def test_perplexity(self):
+        probs = [0.004, 0.1, 5]
+        print learning_utils.calculate_perplexity(probs)
 
 if __name__ == '__main__':
     unittest.main()

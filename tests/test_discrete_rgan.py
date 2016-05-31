@@ -10,6 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardi
 
 import datasets
 import discrete_rgan
+import learning_utils
 
 SHOW_PLOTS = True
 
@@ -209,26 +210,26 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         """
         opts = TestOptions()    
         opts.learning_rate = .01
-        opts.epoch_multiple_gen = 2
-        opts.epoch_multiple_dis = 1
-        opts.batch_size = 32
-        opts.sequence_length = 3
-        opts.num_samples = 512
-        opts.epochs_to_train = 100000
-        opts.num_hidden = 256
+        opts.epoch_multiple_gen = 1
+        opts.epoch_multiple_dis = 2
+        opts.batch_size = 16
+        opts.sequence_length = 2
+        opts.num_samples = 64
+        opts.epochs_to_train = 1000
+        opts.num_hidden = 128
         opts.embed_dim = 32
         opts.z_dim = 4
         opts.dropout = 1.
-        opts.temperature = 1.
+        opts.temperature = .2
         opts.sampling_temperature = .1
         opts.full_sequence_optimization = True
         opts.save_every = 200
         opts.plot_every = 50
-        opts.reduce_temperature_every = 100
-        opts.temperature_reduction_amount = .001
+        opts.reduce_temperature_every = 10
+        opts.temperature_reduction_amount = .01
         opts.min_temperature = .1
-        opts.decay_every = 50
-        opts.decay_ratio = .99
+        opts.decay_every = 20
+        opts.decay_ratio = .96
         opts.max_norm = 2.0
         opts.sentence_limit = 1
         opts.dataset_name = 'mlb'
@@ -237,17 +238,15 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
             model = discrete_rgan.RecurrentDiscreteGenerativeAdversarialNetwork(opts, session, dataset)
             saver = tf.train.Saver()
-            saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
+            #saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
 
             # get the param values beforehand
             params = tf.trainable_variables()
-            # param_info = sorted([(p.name, p.eval()) for p in params 
-            #                     if 'grnn' in p.name])
             param_info = sorted([(p.name, p.eval()) for p in params])
 
             # train
             losses = []
-            TRAIN = False
+            TRAIN = True
             if TRAIN == True:
                 for epoch in range(opts.epochs_to_train):
                     model.run_epoch()  
@@ -283,6 +282,8 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
                 if sample[0] < sample[1]:
                     less_than_count += 1
 
+            perplexity = learning_utils.calculate_perplexity(probs)
+
             num_display = 10
             for (s, p) in zip(samples[:num_display], probs[:num_display]):
                 print "example generated data: {}".format(s)
@@ -290,7 +291,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             print "total samples: {}".format(total)
             print "generated samples also in dataset: {}".format(in_real_data_count)
             print "percent generated in real dataset: {}%".format(100 * in_real_data_count / total)
-            print "percent samples[0] < samples[1]: {}%".format(100 * less_than_count / total)
+            print "perplexity of samples: {}".format(perplexity)
 
             if SHOW_PLOTS:
                 model.plot_results()
@@ -299,8 +300,6 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             # at all because they cannot possibly change because they are blocked
             # from any gradient by a nondifferentiable, discrete sampling operation
             params_after = tf.trainable_variables()
-            # param_after_info = sorted([(p.name, p.eval()) for p in params_after 
-            #                             if 'grnn' in p.name])
             param_after_info = sorted([(p.name, p.eval()) for p in params_after])
             total_diff = 0
             total_num_params = 0
@@ -308,8 +307,6 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
                 print "\n"
                 print n
                 print n_after
-                # print vals.flatten().tolist()
-                # print vals_after.flatten().tolist()
                 num_params = len(vals_after.flatten().tolist())
                 total_num_params += num_params
                 diffs = vals - vals_after

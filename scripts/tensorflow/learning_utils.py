@@ -1,7 +1,9 @@
 
+import numpy as np
 import tensorflow as tf
 
-def batch_sample_with_temperature(arr, temperature=1.0):
+
+def batch_sample_with_temperature_old(arr, temperature=1.0):
     """
     Samples from something resembeling a multinomial distribution.
     Works by multiplying the probabilities of each value by a 
@@ -31,6 +33,13 @@ def batch_sample_with_temperature(arr, temperature=1.0):
         
     return sampled_idx, x
 
+def batch_sample_with_temperature(a, temperature=1.0):
+    new_scores = a / temperature 
+    matrix_X = tf.nn.softmax(new_scores)
+    matrix_U = tf.random_uniform(tf.shape(a), minval = 0, maxval = 1)
+    final_number = tf.argmax(tf.log(matrix_X)-tf.log(-tf.log(matrix_U)),dimension=1)
+    return final_number, matrix_X
+
 def reduce_std(arr, mean):
     """
     Seems like tf doesn't have a reduce_std?
@@ -56,4 +65,14 @@ def get_std_mean(batch):
     batch_mean = tf.reduce_mean(batch, reduction_indices=indices)
     batch_std = reduce_std(batch, batch_mean)
     return batch_std, batch_mean
+
+def calculate_perplexity(probs):
+
+    shape = np.shape(probs)
+    total_size = 1
+    for size in shape:
+        total_size *= size
+
+    perp = -np.sum(np.log(probs)) / total_size
+    return np.exp(perp)
     

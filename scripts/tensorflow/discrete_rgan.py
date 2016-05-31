@@ -47,6 +47,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         self.updates = 0
         self.train_gen_losses = []
         self.train_dis_losses = []
+        self.perplexities = []
 
     def build_placeholders(self):
         # unpack values for easier reference
@@ -432,6 +433,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
     def train_generator(self):
         losses = []
+        batch_probs = []
         num_batches = self.opts.num_samples / self.opts.batch_size
 
         for gepoch in range(self.opts.epoch_multiple_gen):
@@ -457,8 +459,9 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 self.dataset.add_generated_samples(generated)
 
                 losses.append(loss_out)
+                batch_probs.append(probs)
 
-        return losses
+        return losses, batch_probs
 
     def train_discriminator(self):
         losses = []
@@ -495,7 +498,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         gen_losses = []
         dis_losses = []
 
-        gen_losses_out = self.train_generator()
+        gen_losses_out, batch_probs = self.train_generator()
         dis_losses_out = self.train_discriminator()
 
         gen_losses.append(gen_losses_out)
@@ -503,12 +506,14 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
 
         mean_gen_loss = np.mean(gen_losses_out)
         mean_dis_loss = np.mean(dis_losses_out)
+        perplexity = learning_utils.calculate_perplexity(batch_probs)
 
-        print('train epoch: {}\tgen loss: {}\tdis loss: {}'.format(
-            self.epoch, mean_gen_loss, mean_dis_loss))
+        print('train epoch: {}\tgen loss: {}\tdis loss: {}\tperplexity: {}'.format(
+            self.epoch, mean_gen_loss, mean_dis_loss, perplexity))
 
         self.train_gen_losses.append(mean_gen_loss)
         self.train_dis_losses.append(mean_dis_loss)
+        self.perplexities.append(perplexity)
 
     def plot_results(self):
         plt.plot(np.array(self.train_gen_losses), c='blue', linestyle='solid',
@@ -520,6 +525,11 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.savefig('../media/loss.png')
+        plt.close()
+
+        plt.plot(self.perplexities, c='green', label='perplexity')
+        plt.legend()
+        plt.savefig('../media/perplexity.png')
         plt.close()
 
     def sample_space(self):
