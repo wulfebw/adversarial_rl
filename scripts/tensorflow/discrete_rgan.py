@@ -25,6 +25,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+import sys
 import tensorflow as tf
 from tensorflow.python.ops import rnn, seq2seq
 from tensorflow.python.ops.seq2seq import sequence_loss
@@ -305,8 +306,8 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                                     reduction_indices=1)
 
             # get the rewards for this timestep
-            #timestep_rewards = rewards[:, timestep]
-            timestep_rewards = baseline_subtracted_rewards[:, timestep]
+            timestep_rewards = rewards[:, timestep]
+            #timestep_rewards = baseline_subtracted_rewards[:, timestep]
             
             # compute loss this timestep
             timestep_loss = tf.mul(timestep_rewards, choosen_word_probs)
@@ -400,16 +401,16 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 feed[self.temperature_placeholder] = self.opts.temperature
 
                 # perform the actual training step if training
-                output_values = [self._train_gen, self.gen_train_loss_out, 
-                                self.generated, self.timestep_probs, self._train_baseline, 
-                                self.baseline_loss]
-                _, loss_out, generated, probs, _, b_loss = self.sess.run(output_values, 
-                    feed_dict=feed)
                 # output_values = [self._train_gen, self.gen_train_loss_out, 
-                #                 self.generated, self.timestep_probs]
-                # _, loss_out, generated, probs, = self.sess.run(output_values, 
+                #                 self.generated, self.timestep_probs, self._train_baseline, 
+                #                 self.baseline_loss]
+                # _, loss_out, generated, probs, _, b_loss = self.sess.run(output_values, 
                 #     feed_dict=feed)
-                # b_loss = 0
+                output_values = [self._train_gen, self.gen_train_loss_out, 
+                                self.generated, self.timestep_probs]
+                _, loss_out, generated, probs, = self.sess.run(output_values, 
+                    feed_dict=feed)
+                b_loss = 0
 
                 if any(np.isnan(probs.flatten())):
                     print generated
@@ -421,6 +422,8 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 losses.append(loss_out)
                 batch_probs.append(probs)
                 baseline_losses.append(b_loss)
+
+                sys.stdout.write('\r{} / {} : gen loss = {}'.format(bidx, num_batches, np.mean(losses[-100:])))
 
         return losses, batch_probs, baseline_losses
 
@@ -449,6 +452,8 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                     raw_input()
 
                 losses.append(loss_out)
+
+                sys.stdout.write('\rdis loss = {}'.format(np.mean(losses[-100:])))
 
         self.dataset.reset_generated_samples()
         self.epoch += 1

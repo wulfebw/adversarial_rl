@@ -624,10 +624,10 @@ class FakeRecurrentAdversarialDataset(object):
         remove = len(encoded_train) % sequence_length
         if remove > 0:
             encoded_train = encoded_train[:-remove]
-        print encoded_train
+        #print encoded_train
         X_train = encoded_train.reshape(-1, sequence_length)
-        print self.decode_dataset(X_train, real=True)
-        print self.vocab.word_to_index
+        #print self.decode_dataset(X_train, real=True)
+        #print self.vocab.word_to_index
         return X_train
 
     def _make_twitch_dataset(self):
@@ -644,10 +644,10 @@ class FakeRecurrentAdversarialDataset(object):
         remove = len(encoded_train) % sequence_length
         if remove > 0:
             encoded_train = encoded_train[:-remove]
-        print encoded_train
+        #print encoded_train
         X_train = encoded_train.reshape(-1, sequence_length)
-        print self.decode_dataset(X_train, real=True)
-        print self.vocab.word_to_index
+        #print self.decode_dataset(X_train, real=True)
+        #print self.vocab.word_to_index
         return X_train
 
     def next_supervised_batch(self):

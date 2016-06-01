@@ -448,27 +448,27 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         Test with both training.
         """
         opts = TestOptions()    
-        opts.learning_rate = .005
+        opts.learning_rate = .001
         opts.epoch_multiple_gen = 1
-        opts.epoch_multiple_dis = 4
-        opts.batch_size = 64
-        opts.sequence_length = 4
-        opts.num_samples = 256
-        opts.epochs_to_train = 1000
+        opts.epoch_multiple_dis = 2
+        opts.batch_size = 128
+        opts.sequence_length = 8
+        opts.num_samples = 100000
+        opts.epochs_to_train = 30
         opts.num_hidden = 256
         opts.embed_dim = 64
-        opts.z_dim = 20
-        opts.dropout = 1.
+        opts.z_dim = 16
+        opts.dropout = .9
         opts.temperature = .2
         opts.sampling_temperature = .2
         opts.full_sequence_optimization = True
-        opts.save_every = 100
-        opts.plot_every = 100
+        opts.save_every = 1
+        opts.plot_every = 1
         opts.reduce_temperature_every = 100
-        opts.temperature_reduction_amount = .01
+        opts.temperature_reduction_amount = .001
         opts.min_temperature = .1
         opts.decay_every = 100
-        opts.decay_ratio = .96
+        opts.decay_ratio = .99
         opts.max_norm = 2.0
         opts.sentence_limit = 100
         opts.pretrain_epochs = 50
@@ -501,7 +501,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
                 #     model.run_pretrain_epoch()
 
                 for epoch in range(opts.epochs_to_train):
-                    model.run_pretrain_epoch()
+                    #model.run_pretrain_epoch()
                     model.run_epoch()  
 
                     if epoch % opts.save_every == 0:
@@ -541,10 +541,10 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
             perplexity = learning_utils.calculate_perplexity(probs)
 
-            num_display = 3
+            num_display = 30
             for (s, p) in zip(samples[:num_display], probs[:num_display]):
                 print "example generated data: {}".format(s)
-                print "probabilities of those selections: {}".format(p)
+                #print "probabilities of those selections: {}".format(p)
             print "total samples: {}".format(total)
             print "generated samples also in dataset: {}".format(in_real_data_count)
             print "percent generated in real dataset: {}%".format(100 * in_real_data_count / total)
