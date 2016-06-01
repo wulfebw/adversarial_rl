@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn, seq2seq
+from tensorflow.python.ops.seq2seq import sequence_loss
 
 import learning_utils
 
@@ -42,6 +43,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         self.build_placeholders()
         self.build_gen_graph()
         self.build_dis_graph()
+        self.build_xent_graph()
 
         self.epoch = 0
         self.updates = 0
@@ -49,6 +51,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         self.train_dis_losses = []
         self.perplexities = []
         self.baseline_losses = []
+        self.pretrain_losses = []
 
     def build_placeholders(self):
         # unpack values for easier reference
@@ -158,8 +161,6 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 # output to softmax weights
                 gWo = tf.get_variable("gWo", (num_hidden, vocab_dim))
                 gbo = tf.get_variable("gbo", (vocab_dim, ), initializer=tf.zeros)
-
-
 
                 # retrive the word embedding and remove sequence dimension
                 next_input = tf.nn.embedding_lookup(L, word_labels)
@@ -303,8 +304,8 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                                     reduction_indices=1)
 
             # get the rewards for this timestep
-            #timestep_rewards = rewards[:, timestep]
-            timestep_rewards = baseline_subtracted_rewards[:, timestep]
+            timestep_rewards = rewards[:, timestep]
+            #timestep_rewards = baseline_subtracted_rewards[:, timestep]
             
             # compute loss this timestep
             timestep_loss = tf.mul(timestep_rewards, choosen_word_probs)
@@ -398,11 +399,16 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 feed[self.temperature_placeholder] = self.opts.temperature
 
                 # perform the actual training step if training
+                # output_values = [self._train_gen, self.gen_train_loss_out, 
+                #                 self.generated, self.timestep_probs, self._train_baseline, 
+                #                 self.baseline_loss]
+                # _, loss_out, generated, probs, _, b_loss = self.sess.run(output_values, 
+                #     feed_dict=feed)
                 output_values = [self._train_gen, self.gen_train_loss_out, 
-                                self.generated, self.timestep_probs, self._train_baseline, 
-                                self.baseline_loss]
-                _, loss_out, generated, probs, _, b_loss = self.sess.run(output_values, 
+                                self.generated, self.timestep_probs]
+                _, loss_out, generated, probs, = self.sess.run(output_values, 
                     feed_dict=feed)
+                b_loss = 0
 
                 if any(np.isnan(probs.flatten())):
                     print generated
@@ -430,17 +436,8 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 feed[self.dropout_placeholder] = self.opts.dropout
 
                 # perform the actual training step if training
-                output_values = [self._train_dis, self.dis_train_loss_out, self.ce, self.clipped_grads_params[0][0], self.clipped_grads_params[0][1], self.dis_probs]
-                _, loss_out, ce, gs, ps, dprobs = self.sess.run(output_values, feed_dict=feed)
-
-                # print inputs
-                # print targets
-                # print dprobs
-                # print ce
-                # print ps
-                # print gs
-                # print loss_out
-                # raw_input()
+                output_values = [self._train_dis, self.dis_train_loss_out, self.ce]
+                _, loss_out, ce = self.sess.run(output_values, feed_dict=feed)
 
                 if np.isnan(loss_out):
                     print inputs
@@ -481,6 +478,100 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         self.baseline_losses.append(np.mean(baseline_losses))
         self.perplexities.append(perplexity)
 
+    def build_xent_graph(self):
+        self.build_xent_placeholders()
+        self.xent_scores = self.build_xent_model(self.xent_inputs_placeholder)
+        self.xent_loss = self.build_xent_loss(self.xent_scores)
+        self._train_xent = self.build_xent_train_op(self.xent_loss)
+        tf.initialize_all_variables().run()
+
+    def build_xent_placeholders(self):
+        self.xent_inputs_placeholder = tf.placeholder(tf.int32,
+                                  shape=(None, self.opts.sequence_length),
+                                  name="xent_input_placeholder")
+        self.xent_targets_placeholder = tf.placeholder(tf.int32, 
+                                  shape=(None, self.opts.sequence_length),
+                                  name="xent_targets_placeholder")
+
+    def build_xent_model(self, inputs):
+        batch_size = self.opts.batch_size
+        embed_dim = self.opts.embed_dim
+        vocab_dim = self.dataset.vocab_dim
+        z_dim = self.opts.z_dim
+        num_hidden = self.opts.num_hidden
+        sequence_length = self.opts.sequence_length
+
+        with tf.variable_scope("grnn", reuse=True) as scope:
+            L = tf.get_variable('L', (vocab_dim, embed_dim))
+            lstm = rnn.rnn_cell.BasicLSTMCell(num_hidden)
+            gWz = tf.get_variable('gWz', [z_dim, lstm.state_size])
+            gbz = tf.get_variable('gbz', [lstm.state_size])
+            gWo = tf.get_variable("gWo", (num_hidden, vocab_dim))
+            gbo = tf.get_variable("gbo", (vocab_dim, ), initializer=tf.zeros)
+
+        # compute initial hidden state using sampled z value
+        cell_state = tf.matmul(self.z_placeholder, gWz) + gbz
+
+        rnn_scores = []
+        for idx in range(sequence_length):
+
+            # retrieve embedding
+            word_labels = inputs[:, idx]
+            next_input = tf.nn.embedding_lookup(L, word_labels)
+                
+            with tf.variable_scope("grnn", reuse=True) as scope:
+                # compute the next hidden state and cell state
+                hidden_state, cell_state = lstm(next_input, cell_state)
+
+            # project hidden state to size of vocabulary
+            # no nonlinearity here because this will be feed into a softmax
+            # as the scores for the words in the vocabulary
+            scores = tf.matmul(hidden_state, gWo) + gbo
+
+            # accumulate the scores
+            rnn_scores.append(tf.expand_dims(scores, 1))
+
+        # return the scores
+        rnn_scores = tf.concat(values=rnn_scores, concat_dim=1)
+
+        return rnn_scores
+
+    def build_xent_loss(self, scores):
+        batch_size = self.opts.batch_size
+        sequence_length = self.opts.sequence_length
+        vocab_dim = self.dataset.vocab_dim
+        scores = tf.reshape(scores, (batch_size * sequence_length, vocab_dim))
+
+        logits = [scores]
+        targets = [tf.reshape(self.xent_targets_placeholder, [-1])]
+        weights = [tf.ones((batch_size * sequence_length,))]
+        loss = sequence_loss(logits, targets, weights)
+        return loss
+
+    def build_xent_train_op(self, loss):
+        opt = tf.train.AdamOptimizer(self.opts.pretrain_learning_rate)
+        train_op = opt.minimize(loss)
+        return train_op
+
+    def run_pretrain_epoch(self):
+        
+        losses = []
+        for inputs, targets in self.dataset.next_supervised_batch():
+
+            feed = {}
+            z = self.get_z()
+            feed[self.z_placeholder] = z
+            feed[self.xent_inputs_placeholder] = inputs
+            feed[self.xent_targets_placeholder] = targets
+
+            output_values = [self._train_xent, self.xent_loss]
+            _, xent_loss = self.sess.run(output_values, feed_dict=feed)
+            losses.append(xent_loss)
+
+        avg_xent_loss = np.mean(losses)
+        print(avg_xent_loss)
+        self.pretrain_losses.append(avg_xent_loss)
+
     def plot_results(self):
         plt.plot(np.array(self.train_gen_losses), c='blue', linestyle='solid',
             label='training gen loss')
@@ -501,6 +592,11 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         plt.plot(self.baseline_losses, c='teal', label='baseline loss')
         plt.legend()
         plt.savefig('../media/baseline_loss.png')
+        plt.close()
+
+        plt.plot(self.pretrain_losses, c='green', label='xent loss')
+        plt.legend()
+        plt.savefig('../media/xent_loss.png')
         plt.close()
 
     def sample_space(self):

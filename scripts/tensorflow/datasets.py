@@ -552,20 +552,9 @@ class FakeRecurrentAdversarialDataset(object):
 
     def fake_mlb_generator(self):
         words = """craig kimbrel downs d-backs , sets braves saves mark 
-                russell martin punctuates 8-run sixth as pirates stomp brewers
-                roark fans 11 , holds padres to 3 hits in 6-0 win 
-                gordon 's 2 triples lead dodgers past rockies 7-2 
-                buster posey homers in 8th as giants edge mets , win 8th in 10 games 
-                d-rays stop clemens , yankees on kazmir 's gem 
-                carlos santana 's 3-run homer helps indians rally in win over rays 
-                cleveland 10 , kansas city 5 ( 1st game ) 
-                jones matches career-best five hits 
-                hamels denied first mlb win by brewers 
-                wang loses perfect game in 8th ; yankees win 
-                yanks avoid sweep when o 's walk four in 9th 
-                rookie gross hits grand slam in rout of a 's 
-                lamb 's 4 rbi move astros within 1.5 of cubs 
-                sexson provides game-winning hit"""
+            russell martin punctuates 8-run sixth as pirates stomp brewers 
+            roark fans 11 , holds padres to 3 hits in 6-0 win 
+            gordon 's 2 triples lead dodgers past rockies 7-2"""
         words = words.strip().split()
         for w in words:
             yield w
@@ -621,6 +610,30 @@ class FakeRecurrentAdversarialDataset(object):
         print self.decode_dataset(X_train, real=True)
         print self.vocab.word_to_index
         return X_train
+
+    def next_supervised_batch(self):
+
+        # get the data
+        X = self.data["X_train"] 
+
+        # decide number of batches
+        num_samples = len(X)
+        batch_size = self._opts.batch_size
+        num_batches = (num_samples - 1) / batch_size
+
+        # go through all the batches collecting real and 
+        # fake data and yielding it
+        for bidx in range(num_batches):
+
+            # start and end indices
+            start = bidx * batch_size
+            end = (bidx + 1) * batch_size
+
+            # real data
+            inputs = X[start:end]
+            targets = X[start + 1:end + 1]
+
+            yield inputs, targets
 
 
 
