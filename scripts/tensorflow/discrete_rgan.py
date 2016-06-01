@@ -569,7 +569,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
             losses.append(xent_loss)
 
         avg_xent_loss = np.mean(losses)
-        print(avg_xent_loss)
+        print("cross entropy loss: {}".format(avg_xent_loss))
         self.pretrain_losses.append(avg_xent_loss)
 
     def plot_results(self):
@@ -598,6 +598,10 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         plt.legend()
         plt.savefig('../media/xent_loss.png')
         plt.close()
+
+        np.savez('../media/training_info.npz', gen_loss=self.train_gen_losses, 
+                dis_loss=self.train_dis_losses, perplexity=self.perplexities,
+                baseline_loss=self.baseline_losses, xent_loss=self.pretrain_losses)
 
     def sample_space(self):
         """

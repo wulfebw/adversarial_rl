@@ -9,6 +9,7 @@ import tensorflow as tf
 
 DATASET = "title"
 TITLE_FILEPATH = '/Users/wulfebw/Dropbox/School/Stanford/spring_2016/cs224d/project/data/game_summarization/{}_words.csv'.format(DATASET)
+TWITCH_FILEPATH = '../data/chat.in'
 
 def mlb_iterator(raw_data, batch_size, num_steps):
   raw_data = np.array(raw_data, dtype=np.int32)
@@ -39,6 +40,22 @@ def get_mlb_dataset(limit=-1):
 
             if limit > 0 and count > limit:
                 raise StopIteration
+
+def load_twitch_dataset(limit):
+    input_filepath = TWITCH_FILEPATH
+    count = 0
+    sentence_count = 0
+    with open(input_filepath, 'rb') as infile:
+        for row in infile:
+            words = row.strip().split(' ')
+
+            if sentence_count > limit:
+                raise StopIteration
+            sentence_count += 1
+
+            for word in words:
+                yield word
+            yield '<eos>'
 
 class Vocab(object):
   def __init__(self):
@@ -446,6 +463,8 @@ class FakeRecurrentAdversarialDataset(object):
             X_train = self._make_alphabet_dataset()
         elif self._opts.dataset_name == 'mlb':
             X_train = self._make_mlb_dataset()
+        elif self._opts.dataset_name == 'twitch':
+            X_train = self._make_twitch_dataset()
         else:
             raise ValueError("invalid dataset name: {}".format(self._opts.dataset_name))
         data['X_train'] = X_train
@@ -601,6 +620,26 @@ class FakeRecurrentAdversarialDataset(object):
         encoded_train = np.array([self.vocab.encode(word) 
                             for word in self.fake_mlb_generator()], dtype=np.int32)
 
+
+        remove = len(encoded_train) % sequence_length
+        if remove > 0:
+            encoded_train = encoded_train[:-remove]
+        print encoded_train
+        X_train = encoded_train.reshape(-1, sequence_length)
+        print self.decode_dataset(X_train, real=True)
+        print self.vocab.word_to_index
+        return X_train
+
+    def _make_twitch_dataset(self):
+        sequence_length = self._opts.sequence_length
+        num_samples = self._opts.num_samples
+        limit = self._opts.sentence_limit
+
+        self.vocab = Vocab()
+        self.vocab.construct(load_twitch_dataset(limit))
+        self.vocab_dim = len(self.vocab.word_to_index)
+        encoded_train = np.array([self.vocab.encode(word) 
+                            for word in load_twitch_dataset(limit)], dtype=np.int32)
 
         remove = len(encoded_train) % sequence_length
         if remove > 0:
