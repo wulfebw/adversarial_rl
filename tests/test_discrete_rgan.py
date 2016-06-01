@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
@@ -449,29 +451,29 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts.learning_rate = .005
         opts.epoch_multiple_gen = 1
         opts.epoch_multiple_dis = 4
-        opts.batch_size = 8
+        opts.batch_size = 64
         opts.sequence_length = 4
-        opts.num_samples = 64
+        opts.num_samples = 256
         opts.epochs_to_train = 1000
-        opts.num_hidden = 32
-        opts.embed_dim = 16
+        opts.num_hidden = 256
+        opts.embed_dim = 64
         opts.z_dim = 20
         opts.dropout = 1.
         opts.temperature = .2
         opts.sampling_temperature = .2
         opts.full_sequence_optimization = True
-        opts.save_every = 10
-        opts.plot_every = 10
+        opts.save_every = 100
+        opts.plot_every = 100
         opts.reduce_temperature_every = 100
         opts.temperature_reduction_amount = .01
         opts.min_temperature = .1
         opts.decay_every = 100
         opts.decay_ratio = .96
         opts.max_norm = 2.0
-        opts.sentence_limit = 10
+        opts.sentence_limit = 100
         opts.pretrain_epochs = 50
         opts.pretrain_learning_rate = .005
-        opts.save_to_aws = False
+        opts.save_to_aws = True
         opts.dataset_name = 'twitch'
 
         ak = aws_s3_utility.load_key('../keys/access_key.key')
@@ -509,7 +511,8 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
                     if epoch % opts.plot_every == 0:
                         model.plot_results()
-                        aws_utils.upload_directory('../media')
+                        if opts.save_to_aws:
+                            aws_util.upload_directory('../media')
 
                     if epoch % opts.reduce_temperature_every == 0:
                         opts.temperature -= opts.temperature_reduction_amount

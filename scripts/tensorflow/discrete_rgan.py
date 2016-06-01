@@ -21,7 +21,8 @@ ideas:
 8. figure out if multinomial matches [check]
 9. simultaneous training with ce loss
 """
-
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -304,8 +305,8 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                                     reduction_indices=1)
 
             # get the rewards for this timestep
-            timestep_rewards = rewards[:, timestep]
-            #timestep_rewards = baseline_subtracted_rewards[:, timestep]
+            #timestep_rewards = rewards[:, timestep]
+            timestep_rewards = baseline_subtracted_rewards[:, timestep]
             
             # compute loss this timestep
             timestep_loss = tf.mul(timestep_rewards, choosen_word_probs)
@@ -399,16 +400,16 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
                 feed[self.temperature_placeholder] = self.opts.temperature
 
                 # perform the actual training step if training
-                # output_values = [self._train_gen, self.gen_train_loss_out, 
-                #                 self.generated, self.timestep_probs, self._train_baseline, 
-                #                 self.baseline_loss]
-                # _, loss_out, generated, probs, _, b_loss = self.sess.run(output_values, 
-                #     feed_dict=feed)
                 output_values = [self._train_gen, self.gen_train_loss_out, 
-                                self.generated, self.timestep_probs]
-                _, loss_out, generated, probs, = self.sess.run(output_values, 
+                                self.generated, self.timestep_probs, self._train_baseline, 
+                                self.baseline_loss]
+                _, loss_out, generated, probs, _, b_loss = self.sess.run(output_values, 
                     feed_dict=feed)
-                b_loss = 0
+                # output_values = [self._train_gen, self.gen_train_loss_out, 
+                #                 self.generated, self.timestep_probs]
+                # _, loss_out, generated, probs, = self.sess.run(output_values, 
+                #     feed_dict=feed)
+                # b_loss = 0
 
                 if any(np.isnan(probs.flatten())):
                     print generated

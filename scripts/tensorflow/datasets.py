@@ -259,7 +259,7 @@ class FakeAdversarialDataset(object):
             self.data['generated_samples'] = []
         assert samples.shape == (self._opts.batch_size, self._opts.fake_input_dim)
 
-        if self.data['generated_samples'] == []:
+        if len(self.data['generated_samples']) == 0:
             self.data['generated_samples'] = samples
         else:
             self.data['generated_samples'] = np.vstack((self.data['generated_samples'], samples))
@@ -423,7 +423,7 @@ class FakeRecurrentAdversarialDataset(object):
             self.data['generated_samples'] = []
         assert samples.shape == (self._opts.batch_size, self._opts.sequence_length, self._opts.input_dim) or samples.shape == (self._opts.batch_size, self._opts.sequence_length)
 
-        if self.data['generated_samples'] == []:
+        if len(self.data['generated_samples']) == 0:
             self.data['generated_samples'] = samples
         else:
             self.data['generated_samples'] = np.vstack((self.data['generated_samples'], samples))
