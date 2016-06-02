@@ -1,4 +1,4 @@
-from guppy import hpy
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.animation as animation
@@ -476,9 +476,9 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts.pretrain_learning_rate = .005
         opts.save_to_aws = False
         opts.dataset_name = 'twitch'
-        opts.aws_bucket = 'pgrgan'
-        opts.with_baseline = False
-        opts.with_xent = False
+        opts.aws_bucket = 'pgrganxentbaseline'
+        opts.with_baseline = True
+        opts.with_xent = True
         opts.sample_every = 2
 
         ak = aws_s3_utility.load_key('../keys/access_key.key')
@@ -502,9 +502,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             losses = []
             TRAIN = True
             if TRAIN == True:
-                h = hpy()
                 for epoch in range(opts.epochs_to_train):
-                    print h.heap()
 
                     if opts.with_xent:
                         model.run_pretrain_epoch()
