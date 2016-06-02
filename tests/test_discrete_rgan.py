@@ -104,23 +104,23 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts = TestOptions()    
         opts.learning_rate = .01
         opts.epoch_multiple_gen = 1
-        opts.epoch_multiple_dis = 1
+        opts.epoch_multiple_dis = 5
         opts.batch_size = 52
         opts.num_samples = 130
         opts.epochs_to_train = 1000
-        opts.num_hidden = 64
-        opts.embed_dim = 26
-        opts.z_dim = 2
+        opts.num_hidden = 128
+        opts.embed_dim = 32
+        opts.z_dim = 16
         opts.dropout = 1.
         opts.temperature = 1.
-        opts.sampling_temperature = .5
+        opts.sampling_temperature = .2
         opts.full_sequence_optimization = True
         opts.save_every = 200
-        opts.plot_every = 50
+        opts.plot_every = 100
         opts.reduce_temperature_every = 20
         opts.temperature_reduction_amount = .01
         opts.min_temperature = .1
-        opts.decay_every = 25
+        opts.decay_every = 10
         opts.decay_ratio = .96
         opts.max_norm = 1.0
         opts.pretrain_learning_rate = .01
@@ -129,7 +129,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             dataset = datasets.FakeRecurrentAdversarialDataset(opts)
             model = discrete_rgan.RecurrentDiscreteGenerativeAdversarialNetwork(opts, session, dataset)
             saver = tf.train.Saver()
-            #saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
+            saver.restore(session, '../snapshots/{}.weights'.format(opts.dataset_name))
 
             # get the param values beforehand
             params = tf.trainable_variables()
@@ -137,7 +137,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
 
             # train
             losses = []
-            TRAIN = True
+            TRAIN = False
             if TRAIN == True:
                 for epoch in range(opts.epochs_to_train):
                     model.run_epoch()  
