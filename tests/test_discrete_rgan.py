@@ -448,19 +448,19 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         Test with both training.
         """
         opts = TestOptions()    
-        opts.learning_rate = .001
+        opts.learning_rate = .005
         opts.epoch_multiple_gen = 1
         opts.epoch_multiple_dis = 2
-        opts.batch_size = 128
-        opts.sequence_length = 8
+        opts.batch_size = 64
+        opts.sequence_length = 4
         opts.num_samples = 100000
-        opts.epochs_to_train = 30
+        opts.epochs_to_train = 10
         opts.num_hidden = 256
         opts.embed_dim = 64
         opts.z_dim = 16
         opts.dropout = .9
-        opts.temperature = .2
-        opts.sampling_temperature = .2
+        opts.temperature = 1.
+        opts.sampling_temperature = .5
         opts.full_sequence_optimization = True
         opts.save_every = 1
         opts.plot_every = 1
@@ -473,12 +473,15 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts.sentence_limit = 100
         opts.pretrain_epochs = 50
         opts.pretrain_learning_rate = .005
-        opts.save_to_aws = True
+        opts.save_to_aws = False
         opts.dataset_name = 'twitch'
+        opts.aws_bucket = 'pgrgan'
+        opts.with_baseline = True
+        opts.with_xent = True
 
         ak = aws_s3_utility.load_key('../keys/access_key.key')
         sk = aws_s3_utility.load_key('../keys/secret_key.key')
-        bucket = 'pgrgan'
+        bucket = opts.aws_bucket
         aws_util = aws_s3_utility.S3Utility(ak, sk, bucket)
         weights_filepath = '../snapshots/{}.weights'.format(opts.dataset_name)
         weights_filename = '{}.weights'.format(opts.dataset_name)
@@ -497,11 +500,10 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             losses = []
             TRAIN = True
             if TRAIN == True:
-                # for epoch in range(opts.pretrain_epochs):
-                #     model.run_pretrain_epoch()
 
                 for epoch in range(opts.epochs_to_train):
-                    #model.run_pretrain_epoch()
+                    if opts.with_xent:
+                        model.run_pretrain_epoch()
                     model.run_epoch()  
 
                     if epoch % opts.save_every == 0:
@@ -539,7 +541,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
                 if sample[0] < sample[1]:
                     less_than_count += 1
 
-            perplexity = learning_utils.calculate_perplexity(probs)
+            perplexity = 0 #learning_utils.calculate_perplexity(probs)
 
             num_display = 30
             for (s, p) in zip(samples[:num_display], probs[:num_display]):
