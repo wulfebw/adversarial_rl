@@ -481,9 +481,9 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         gen_losses_out, batch_probs, baseline_loss = self.train_generator()
         dis_losses_out = self.train_discriminator()
 
-        gen_losses.append(gen_losses_out)
-        dis_losses.append(dis_losses_out)
-        baseline_losses.append(baseline_loss)
+        # gen_losses.append(gen_losses_out)
+        # dis_losses.append(dis_losses_out)
+        # baseline_losses.append(baseline_loss)
 
         mean_gen_loss = np.mean(gen_losses_out)
         mean_dis_loss = np.mean(dis_losses_out)

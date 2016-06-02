@@ -423,6 +423,9 @@ class FakeRecurrentAdversarialDataset(object):
             self.data['generated_samples'] = []
         assert samples.shape == (self._opts.batch_size, self._opts.sequence_length, self._opts.input_dim) or samples.shape == (self._opts.batch_size, self._opts.sequence_length)
 
+        if len(self.data['generated_samples']) > self._opts.num_samples / 2:
+            return
+
         if len(self.data['generated_samples']) == 0:
             self.data['generated_samples'] = samples
         else:
@@ -468,6 +471,7 @@ class FakeRecurrentAdversarialDataset(object):
         else:
             raise ValueError("invalid dataset name: {}".format(self._opts.dataset_name))
         data['X_train'] = X_train
+        data['generated_samples'] = []
         self.data = data
 
     def _make_sine_dataset(self):

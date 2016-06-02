@@ -1,3 +1,4 @@
+from guppy import hpy
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.animation as animation
@@ -450,7 +451,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts = TestOptions()    
         opts.learning_rate = .005
         opts.epoch_multiple_gen = 1
-        opts.epoch_multiple_dis = 2
+        opts.epoch_multiple_dis = 1
         opts.batch_size = 64
         opts.sequence_length = 4
         opts.num_samples = 100000
@@ -473,11 +474,11 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts.sentence_limit = 50000
         opts.pretrain_epochs = 50
         opts.pretrain_learning_rate = .005
-        opts.save_to_aws = True
+        opts.save_to_aws = False
         opts.dataset_name = 'twitch'
         opts.aws_bucket = 'pgrgan'
-        opts.with_baseline = True
-        opts.with_xent = True
+        opts.with_baseline = False
+        opts.with_xent = False
         opts.sample_every = 2
 
         ak = aws_s3_utility.load_key('../keys/access_key.key')
@@ -501,8 +502,10 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
             losses = []
             TRAIN = True
             if TRAIN == True:
-
+                h = hpy()
                 for epoch in range(opts.epochs_to_train):
+                    print h.heap()
+
                     if opts.with_xent:
                         model.run_pretrain_epoch()
                     model.run_epoch()  
@@ -510,12 +513,18 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
                     if epoch % opts.save_every == 0:
                         saver.save(session, weights_filepath)
                         if opts.save_to_aws:
-                            aws_util.upload_file(weights_filename, weights_filepath)
+                            try:
+                                aws_util.upload_file(weights_filename, weights_filepath)
+                            except:
+                                pass
 
                     if epoch % opts.plot_every == 0:
                         model.plot_results()
                         if opts.save_to_aws:
-                            aws_util.upload_directory('../media')
+                            try:
+                                aws_util.upload_directory('../media')
+                            except:
+                                pass
 
                     if epoch % opts.reduce_temperature_every == 0:
                         opts.temperature -= opts.temperature_reduction_amount
