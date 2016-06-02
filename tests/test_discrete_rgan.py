@@ -454,7 +454,7 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts.batch_size = 64
         opts.sequence_length = 4
         opts.num_samples = 100000
-        opts.epochs_to_train = 10
+        opts.epochs_to_train = 1000
         opts.num_hidden = 256
         opts.embed_dim = 64
         opts.z_dim = 16
@@ -464,20 +464,21 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
         opts.full_sequence_optimization = True
         opts.save_every = 1
         opts.plot_every = 1
-        opts.reduce_temperature_every = 100
-        opts.temperature_reduction_amount = .001
+        opts.reduce_temperature_every = 1
+        opts.temperature_reduction_amount = .01
         opts.min_temperature = .1
         opts.decay_every = 100
-        opts.decay_ratio = .99
+        opts.decay_ratio = .97
         opts.max_norm = 2.0
-        opts.sentence_limit = 100
+        opts.sentence_limit = 50000
         opts.pretrain_epochs = 50
         opts.pretrain_learning_rate = .005
-        opts.save_to_aws = False
+        opts.save_to_aws = True
         opts.dataset_name = 'twitch'
         opts.aws_bucket = 'pgrgan'
         opts.with_baseline = True
         opts.with_xent = True
+        opts.sample_every = 2
 
         ak = aws_s3_utility.load_key('../keys/access_key.key')
         sk = aws_s3_utility.load_key('../keys/secret_key.key')
@@ -519,6 +520,12 @@ class TestRecurrentDiscreteGenerativeAdversarialNetwork(unittest.TestCase):
                     if epoch % opts.reduce_temperature_every == 0:
                         opts.temperature -= opts.temperature_reduction_amount
                         opts.temperature = max(opts.min_temperature, opts.temperature)
+
+                    if epoch % opts.sample_every == 0:
+                        samples, probs = model.discrete_sample_space()
+                        samples = dataset.decode_dataset(samples, real=True)
+                        print samples[0]
+                        np.savez('../media/samples.npz', samples=samples, probs=probs)
 
             # sample linearly from z space
             if opts.discrete:

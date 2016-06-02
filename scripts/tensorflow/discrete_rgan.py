@@ -344,6 +344,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         learning_rate = tf.train.exponential_decay(init_learning_rate, global_step,
                                 decay_every, decay_ratio, staircase=True)
         opt = tf.train.AdamOptimizer(learning_rate)   
+        self.lr = learning_rate
         # optimize only generative params o/w will also move the 
         # discriminator's params, which actually works, but 
         # is just incorrect      
@@ -653,7 +654,7 @@ class RecurrentDiscreteGenerativeAdversarialNetwork(object):
         z_dim = self.opts.z_dim
         z_lim = self.opts.z_lim
 
-        steps = 10000
+        steps = sequence_length * batch_size * 2
         batches = steps / (batch_size *  sequence_length)
         space = np.random.uniform(-z_lim, z_lim, size=(batches, batch_size, z_dim))
         samples = []

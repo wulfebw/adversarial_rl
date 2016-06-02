@@ -636,7 +636,7 @@ class FakeRecurrentAdversarialDataset(object):
         limit = self._opts.sentence_limit
 
         self.vocab = Vocab()
-        self.vocab.construct(load_twitch_dataset(limit))
+        self.vocab.limited_construct(load_twitch_dataset(limit))
         self.vocab_dim = len(self.vocab.word_to_index)
         encoded_train = np.array([self.vocab.encode(word) 
                             for word in load_twitch_dataset(limit)], dtype=np.int32)
